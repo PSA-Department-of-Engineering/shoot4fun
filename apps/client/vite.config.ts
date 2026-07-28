@@ -1,6 +1,35 @@
 import { defineConfig } from 'vite';
 
-// base './' keeps the built app servable from any sub-path.
 export default defineConfig({
-    base: './',
+    server: {
+        port: 4173,
+        proxy: {
+            '/api': {
+                target: 'http://127.0.0.1:8000',
+                changeOrigin: true,
+            },
+            '/ws': {
+                target: 'ws://127.0.0.1:8000',
+                ws: true,
+                changeOrigin: true,
+            },
+        },
+    },
+    preview: {
+        port: 4173,
+        proxy: {
+            '/api': {
+                target: 'http://127.0.0.1:8000',
+                changeOrigin: true,
+            },
+            '/ws': {
+                target: 'ws://127.0.0.1:8000',
+                ws: true,
+                changeOrigin: true,
+            },
+        },
+    },
+    build: {
+        target: 'esnext',
+    },
 });

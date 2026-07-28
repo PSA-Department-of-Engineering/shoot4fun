@@ -4,10 +4,15 @@ test('the scene mounts, renders a first frame, and logs no errors', async ({ pag
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(String(err)));
     page.on('console', (msg) => {
-        if (msg.type() === 'error') errors.push(msg.text());
+        if (msg.type() !== 'error') return;
+        const text = msg.text();
+        // The WebSocket connection failure is expected when no backend is
+        // running (this is a client-only smoke). Filter it out.
+        if (text.includes('WebSocket connection')) return;
+        errors.push(text);
     });
 
-    await page.goto('/');
+    await page.goto('/?offline=1');
 
     // data-scene-ready flips on the first rendered frame (src/scene/SceneApp.ts);
     // reaching it proves the WebGL context and the animation loop are alive.

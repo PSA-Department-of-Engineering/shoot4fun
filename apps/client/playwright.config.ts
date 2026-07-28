@@ -1,20 +1,17 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// Local runs serve the built app via `vite preview`; point BASE_URL at a
-// deployed URL to run the same specs post-deploy and skip the local server.
 const PORT = 4173;
 const BASE_URL = process.env.BASE_URL ?? `http://localhost:${PORT}`;
+const RUN_WITH_BACKEND = process.env.SKIP_BACKEND !== '1';
 
 export default defineConfig({
     testDir: './e2e',
     timeout: 60_000,
-    expect: { timeout: 30_000 },
+    expect: { timeout: 10_000 },
     workers: 1,
     reporter: 'line',
     use: {
         baseURL: BASE_URL,
-        // WebGL under headless Chromium runs on SwiftShader; these flags
-        // enable it, in CI included (REF-ThreeJS section 10).
         launchOptions: {
             args: [
                 '--use-gl=angle',
@@ -28,9 +25,15 @@ export default defineConfig({
     webServer: process.env.BASE_URL
         ? undefined
         : {
-              command: 'npm run preview',
+              command: RUN_WITH_BACKEND
+                  ? `cmd /c e2e\\run-with-backend.cmd`
+                  : 'npm run preview',
               url: `http://localhost:${PORT}`,
               reuseExistingServer: !process.env.CI,
               timeout: 120_000,
+              env: {
+                  DATABASE_URL: '',
+                  DISABLE_TICK_LOOP: '0',
+              },
           },
 });

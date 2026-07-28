@@ -1,0 +1,298 @@
+/* Shoot4Fun brand theme.
+ * Locked at .delivery/design.md §1.1 (full 19-key shadcn set).
+ * The same HSL values flow into the 3D scene via src/brand/tokens.ts.
+ */
+
+:root {
+    --background: 30 25% 95%;
+    --foreground: 15 10% 12%;
+    --card: 30 25% 95%;
+    --card-foreground: 15 10% 12%;
+    --primary: 12 95% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 12% 92%;
+    --secondary-foreground: 15 10% 12%;
+    --muted: 30 12% 88%;
+    --muted-foreground: 15 8% 38%;
+    --accent: 50 100% 50%;
+    --accent-foreground: 15 10% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 30 12% 80%;
+    --input: 30 12% 80%;
+    --ring: 12 95% 55%;
+    --radius: 0.5rem;
+    --font-sans: "Inter", system-ui, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+    position: fixed;
+    inset: 0;
+    background: hsl(var(--background));
+}
+
+#scene-canvas {
+    position: fixed;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+[data-scene-ready="false"] #scene-canvas {
+    visibility: hidden;
+}
+
+/* Lobby, results, settings (DOM surfaces; INT-011) */
+.surface {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: hsl(var(--background) / 0.95);
+    z-index: 20;
+}
+
+.card {
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
+    border-top: 4px solid hsl(var(--primary));
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    max-width: 28rem;
+    width: 100%;
+    box-shadow: 0 12px 32px hsl(var(--foreground) / 0.08);
+}
+
+.card h1 {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 1.5rem;
+    margin: 0 0 0.5rem 0;
+    color: hsl(var(--primary));
+}
+
+.card h2 {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 1.125rem;
+    margin: 1.5rem 0 0.5rem 0;
+}
+
+.card p {
+    margin: 0.5rem 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.875rem;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 80ms;
+}
+
+.btn:hover {
+    background: hsl(var(--muted));
+}
+
+.btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+}
+
+.btn-primary:hover {
+    background: hsl(var(--primary) / 0.9);
+}
+
+.btn-primary:disabled {
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    border-color: hsl(var(--muted));
+    cursor: not-allowed;
+}
+
+.input {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid hsl(var(--input));
+    border-radius: var(--radius);
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+}
+
+.input:focus {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 1px;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+}
+
+/* HUD */
+.hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    z-index: 10;
+}
+
+.hud-number {
+    font-family: var(--font-sans);
+    font-weight: 900;
+    color: hsl(var(--foreground));
+    text-shadow: 0 0 2px hsl(var(--background)), 0 0 1px hsl(var(--background));
+}
+
+.hud-secondary {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    color: hsl(var(--foreground));
+    text-shadow: 0 0 2px hsl(var(--background));
+}
+
+.hud-crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 18px;
+    height: 18px;
+}
+
+.hud-health {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hud-health-bar {
+    width: 240px;
+    height: 16px;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.hud-health-fill {
+    height: 100%;
+    background: hsl(var(--primary));
+    transition: width 120ms;
+}
+
+.hud-ammo {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    font-size: 36px;
+    text-align: right;
+}
+
+.hud-stats {
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+}
+
+.hud-respawn {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: hsl(var(--background) / 0.55);
+    color: hsl(var(--primary));
+    font-size: 64px;
+    font-weight: 900;
+}
+
+.hud-respawn[data-visible="true"] {
+    display: flex;
+}
+
+.leaderboard-row {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr 5rem;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    font-size: 16px;
+    border: 1px solid transparent;
+}
+
+.leaderboard-row.first {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+}
+
+.leaderboard-row .place {
+    font-weight: 800;
+    color: inherit;
+}
+
+.muted-text {
+    color: hsl(var(--muted-foreground));
+}
+
+.toast {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.5rem 1rem;
+    background: hsl(var(--destructive));
+    color: hsl(var(--destructive-foreground));
+    border-radius: var(--radius);
+    font-weight: 600;
+    z-index: 30;
+}
