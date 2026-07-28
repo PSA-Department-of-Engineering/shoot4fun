@@ -1,0 +1,20 @@
+name: shoot4fun
+
+# ADR-018: every image a repo ships is enumerated in devops/docker-compose.yml,
+# the single source of truth. The reusable build workflow reads this file
+# and pushes every service that has a build: section as
+# $REG/<image>:<semver>. The platform's image-updater then binds each
+# image to a Helm value via the multi-image shape
+# (image_components=["server", "client"]).
+
+services:
+  server:
+    image: ghcr.io/psa-department-of-engineering/shoot4fun-server
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+  client:
+    image: ghcr.io/psa-department-of-engineering/shoot4fun-client
+    build:
+      context: ..
+      dockerfile: apps/client/Dockerfile
