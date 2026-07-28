@@ -6,8 +6,6 @@ name: ci-caller
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 jobs:
   ci-caller:
