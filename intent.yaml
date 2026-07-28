@@ -1,0 +1,225 @@
+# Intent specification — shoot4fun
+#
+# One claim per proposal Req ID. Each claim is the only maintained
+# correctness spec for the system; the proposal's requirement spine is
+# the traceability anchor (`derived_from`), and the test surface is what
+# the claim is attestable by (CSD-INTENT-01).
+#
+# All claims start as `status: draft`. The build promotes them to
+# `active` as it stands each one up; the audit (`csd-intent .`) enforces
+# attestation only on `active` claims, so a draft claim with no test
+# marker is fine at the plan gate and is the build's job to fill in.
+# Plan-time test stubs live at tests/intent/ and prove the claim-to-test
+# wiring is wired before the build swaps them for real tests.
+#
+# The proposal is the durable source for requirement IDs and the
+# descope list (§"What the verbatim ask does NOT cover"). Every Req ID
+# is mapped here; every descoped item is restated in .delivery/handoff.md
+# under "Descoped (recorded)". No silent drops.
+
+version: 1.0.0
+spec: CSD-INTENT-01
+
+INT-001:
+  version: 1.0.0
+  status: draft
+  statement: "The client renders a 3D scene with a WebGL canvas driven by Three.js, and that canvas presents a live frame within 2s of the lobby hand-off."
+  rationale: "Three.js IS the rendering stack; a build that drops Three.js (or renders to a 2D canvas) fails the `threejs` token of the verbatim ask."
+  derived_from: REN-001
+  test:
+    scope: e2e
+    component: ThreeJsScene
+    type: behavior
+  criticality: critical
+
+INT-002:
+  version: 1.0.0
+  status: draft
+  statement: "Pointer-lock active, mouse movement rotates the first-person camera around the player's local Y (yaw) and X (pitch, clamped to avoid gimbal flip)."
+  rationale: "Mouse-look is the FPS input contract; without it the scene is a third-person viewer, not a shooter."
+  derived_from: CAM-001
+  test:
+    scope: e2e
+    component: FirstPersonCamera
+    type: behavior
+  criticality: critical
+
+INT-003:
+  version: 1.0.0
+  status: draft
+  statement: "Holding W, A, S, or D moves the local player on the arena's flat ground at a fixed speed, released keys stop motion within one tick."
+  rationale: "WASD-on-a-flat-plane is the literal definition of the `MOV-001` ask; anything else (jump, sprint, swim) is scope creep that has not been priced."
+  derived_from: MOV-001
+  test:
+    scope: e2e
+    component: PlayerController
+    type: behavior
+  criticality: critical
+
+INT-004:
+  version: 1.0.0
+  status: draft
+  statement: "A primary-mouse click while pointer-locked fires the equipped weapon (hitscan or projectile); a hit decrements the target's hit points by the weapon's damage, a miss is silent."
+  rationale: "SHO-001 is the single requirement that turns the app from a 'scene' into a 'shooter'; the fire contract must be end-to-end (input -> raycast/projectile -> HP delta) and not just a UI animation."
+  derived_from: SHO-001
+  test:
+    scope: e2e
+    component: WeaponSystem
+    type: behavior
+  criticality: critical
+
+INT-005:
+  version: 1.0.0
+  status: draft
+  statement: "Every player has non-negative hit points; when HP reaches zero the player respawns at a spawn point after a 3s respawn overlay that begins at the moment of death (the overlay reads RESPAWNING IN 3... 2... 1... 0; respawn happens at 0), with hit points reset to full."
+  rationale: "Respawn is the loop that keeps a 6-8s match playable past one death; without it the match ends on the first kill."
+  derived_from: HP-001
+  test:
+    scope: unit
+    component: PlayerHealth
+    type: invariant
+  criticality: high
+
+INT-006:
+  version: 1.0.0
+  status: draft
+  statement: "The MVP arena is one bounded flat ground plane populated with simple cover objects (low walls, crates, barrels) per the design's arena section."
+  rationale: "MAP-001 is the `simple` token's spatial answer; bounded = the player can run into a wall, cover = the cover mechanic is playable."
+  derived_from: MAP-001
+  test:
+    scope: e2e
+    component: Arena
+    type: behavior
+  criticality: high
+
+INT-007:
+  version: 1.0.0
+  status: draft
+  statement: "Player-to-wall collision prevents the local player from leaving the arena bounds or passing through cover; player-to-player collision prevents two players from occupying the same point."
+  rationale: "COL-001 is the line between 'a scene with avatars' and 'a game'; without it, players fall through the floor and clip through each other."
+  derived_from: COL-001
+  test:
+    scope: e2e
+    component: CollisionSystem
+    type: behavior
+  criticality: critical
+
+INT-008:
+  version: 1.0.0
+  status: draft
+  statement: "A WebSocket match room accepts between 2 and 4 concurrent players; the server rejects a 5th connection with a documented `ROOM_FULL` error code, the room ID is the only routing key."
+  rationale: "`multiplayer` is the token whose bounds the scope fixed (2-4 players); a room that accepts 1 player is not multiplayer, a room that accepts 5 inflates the per-instance resource budget the proposal priced (PERF-001)."
+  derived_from: NET-001
+  test:
+    scope: integration
+    component: WebSocketMatch
+    type: contract
+  criticality: critical
+
+INT-009:
+  version: 1.0.0
+  status: draft
+  statement: "Position and rotation are server-authoritative: clients send input, the server ticks at a fixed rate of 20Hz, and the broadcast state is the server's truth; client-side position is the latest server snapshot."
+  rationale: "Server-authoritative is the only cheat-resistance strategy the proposal priced (ARCH-001); anything else is a regression to peer-to-peer trust."
+  derived_from: SYNC-001
+  test:
+    scope: integration
+    component: AuthoritativeTick
+    type: invariant
+  criticality: critical
+
+INT-010:
+  version: 1.0.0
+  status: draft
+  statement: "Each player has a per-match kill counter that increments on a confirmed kill; the match ends when the timer expires or all but one player is eliminated, and the player with the highest kill count wins."
+  rationale: "SCO-001 is the scoring rule of a match; the unit-testable shape is the counter increment, the e2e shape is the win-condition."
+  derived_from: SCO-001
+  test:
+    scope: unit
+    component: KillCounter
+    type: invariant
+  criticality: high
+
+INT-011:
+  version: 1.0.0
+  status: draft
+  statement: "A match runs a lobby -> playing -> results state machine: the lobby is the only place a player can ready up, the playing state is the only state in which HP and the kill counter change, the results state is the only state in which the leaderboard renders."
+  rationale: "MAT-001 is the lifecycle that makes `multiplayer` a game and not a chat; the FSM is the part that is unit-testable, the surface is e2e."
+  derived_from: MAT-001
+  test:
+    scope: unit
+    component: MatchStateMachine
+    type: behavior
+  criticality: critical
+
+INT-012:
+  version: 1.0.0
+  status: draft
+  statement: "The frontend and backend are containerised, pushed to GHCR under PSA-Department-of-Engineering, and the PSA Foundry platform reconciles them to the public hostname `shoot4fun.chaos-architect.dev`; a cache-busted HTTPS GET of that hostname returns a 200 (or a 302/401 behind OIDC) within 5s, and the platform's per-app conformance report is green for the `shoot4fun` app."
+  rationale: "DEP-001 is the only way the engagement ships; the build's done-definition per REF-Delivery §5a includes a live evidence chain, not a `docker compose up` on the operator's laptop."
+  derived_from: DEP-001
+  test:
+    scope: integration
+    component: FoundryDeployment
+    type: contract
+  criticality: critical
+
+INT-013:
+  version: 1.0.0
+  status: draft
+  statement: "At least two distinct weapons are selectable in-match (via the 1/2 keys); each weapon has its own rate of fire, magazine size, damage, and reload time, and the active weapon's stats drive the HUD's ammo display."
+  rationale: "WPN-002 is the P2 polish that makes the shooter's gameplay varied; the 'different feel' is gameplay-only, the HUD chrome is shared (per design §2.2)."
+  derived_from: WPN-002
+  test:
+    scope: e2e
+    component: WeaponSystem
+    type: behavior
+  criticality: medium
+
+INT-014:
+  version: 1.0.0
+  status: draft
+  statement: "The lobby exposes at least two arena maps that the host can pick before starting the match; the server loads the chosen map and the client receives its layout before the playing state begins."
+  rationale: "MAP2-002 is the P2 revisit of the `simple` token; the lobby selector is the player-facing surface, the server-side load is the integration contract."
+  derived_from: MAP2-002
+  test:
+    scope: e2e
+    component: ArenaSelector
+    type: behavior
+  criticality: medium
+
+INT-015:
+  version: 1.0.0
+  status: draft
+  statement: "In-match audio cues fire for gunshot, hit, footstep, the lobby horn on match start, and the results sting on match end; sounds are generated at runtime via the Web Audio API (no audio files in the repo) and the master/SFX volumes read from `localStorage`."
+  rationale: "SND-002 is the P2 polish that gives the match a sense of presence; runtime generation keeps the repo asset-free (no licence-cleanup work)."
+  derived_from: SND-002
+  test:
+    scope: integration
+    component: WebAudioEngine
+    type: behavior
+  criticality: medium
+
+INT-016:
+  version: 1.0.0
+  status: draft
+  statement: "Muzzle flash, hit particles, and a basic shadow map are present in the scene; lighting is one hemisphere + one directional per design §2.1, and the postprocessing chain is empty (no FXAA, no bloom) so the perf budget holds."
+  rationale: "VFX-002 is the P2 polish that lifts the look from functional to readable; the empty postprocessing chain is a perf-bar commitment, not an oversight."
+  derived_from: VFX-002
+  test:
+    scope: integration
+    component: ParticleSystem
+    type: behavior
+  criticality: medium
+
+INT-017:
+  version: 1.0.0
+  status: draft
+  statement: "A persistent best-score leaderboard per arena survives match end and process restart; the leaderboard is backed by the PSA platform's per-app database (a `pg-app-shoot4fun` role on the platform's PostgreSQL), and only the highest per-arena score is retained."
+  rationale: "LDR-002 is the P2 capability that needs a priced platform grant (DEP-002); a 'best score' in `localStorage` is not the requirement, the durable store is."
+  derived_from: LDR-002
+  test:
+    scope: integration
+    component: LeaderboardRepository
+    type: contract
+  criticality: medium
