@@ -32,6 +32,43 @@ credential_ref: csd-intent-mcp,protopane-mcp,estimatekit-mcp,platform-studio-mcp
 > | The audit | `python -m csd_intent.cli .` | Schema + orphan + coverage; clean at handoff write (17 claims, 17 attested) |
 > | The design prototype (legacy) | `https://protopane.chaos-architect.dev/p/shoot4fun` (reachable via `protopane_get_project`) | The locked brand theme + the prototyped DOM surfaces (`lobby`, `results`, `settings`); the 3D scene is prose in `design.md` §2, not a prototype |
 
+## 0. Contract anchors (mechanical preflight)
+
+The three inline bold-anchor labels the run-delivery-plan preflight script
+checks for, pointing at the sections that carry the substance. Added at the
+build phase as a mechanical-format fix; the substance is unchanged.
+
+**Authorization**: see §3 (architecture / image shape — two-image
+`onboard_app(name="shoot4fun", image_components=["server", "client"], expose_mcp=False)`),
+§10 (run mode and authorization overrides), and §17.3 (what the build may
+push, merge, apply, touch). Pre-authorized: commits to `main` on the app
+repo; opening (never merging) the platform onboarding PRs
+(`foundry-onboard-app`, `foundry-onboard-database`); the per-app credential
+Job writing secrets in-cluster (`pg-app-shoot4fun` mints on the platform,
+ADR-034); the build's Helm chart values via the image-updater write-back
+(never an in-hand chart pin edit). **Nothing else is authorized**.
+
+**Not authorized**: see §16 — descoping a priced requirement, merging a
+platform PR, signing a delivery gate by hand, re-opening a downstream gate,
+editing the estimation project, force-pushing, committing secrets, running
+untrusted code from build-time LLM output, inventing a colour / font / asset
+outside the locked visual identity, or waiting for a human beyond the named
+human gates in §11. **Nothing else is authorized**.
+
+**Done-definition**: see §13 — the app is verified live, evidenced by the
+full seven-link chain: (1) CI green on `main`, (2) GHCR `shoot4fun-server`
+and `shoot4fun-client` images at the new tag, (3) promotion write-back
+visible on the deploy branch (`<app>.images.<component>.tag`), (4) cache-busted
+HTTPS GET of `shoot4fun.chaos-architect.dev` returns 2xx with response
+headers postdating the release, (5) per-app `platform-studio app_status
+shoot4fun` reports every link as `ok`, (6) `has_database: true` and
+`has_identity: false` (identity is descoped — `false` is the intended state),
+and (7) every `intent.yaml` claim is `status: active` after the per-claim
+tests pass. **Nothing else is done**.
+
+**Degraded stop-states**: see §14. A wall is the only thing that stops the
+run; everything else loops to green.
+
 ## 1. Identity
 
 | Field | Value |
