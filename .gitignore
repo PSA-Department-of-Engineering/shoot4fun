@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+.cache/
+
+# editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env
+.env
+.env.local
+.env.*.local
+
+# coverage
+coverage/
+.nyc_output/
+
+# DO NOT git-ignore .delivery/ — the delivery scratch is committed and pushed
+# so a fresh clone (or the next phase's fresh session) can resume the run.
