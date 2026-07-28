@@ -6,12 +6,25 @@ gate: proposal
 signed: 2026-07-28
 reviewed: 2026-07-28
 run: shoot4fun-2026-07-28
-attempt: 2
+attempt: 3
 mode: interactive
 started: 2026-07-28T00:00:00Z
 finished:
 credential_ref: estimatekit-mcp
 ---
+
+> **Revision log — attempt 3.** The proposal was re-opened on 2026-07-28 by
+> the operator after a UI review caught that the resource plan's
+> `Rate Day` column was `EUR 0` for every profile. The rate column is
+> what the estimation engine's quote and financial model derive their
+> numbers from; zero rates produce a zero quote, which is misleading
+> even when the engagement is self-serve. The fix sets the rates to
+> market values (Delivery Manager 280, Solution Architect 360, Tech
+> Lead 360, QA Engineer 250 EUR/day, matching the scaffold) and updates
+> `COM-001` to record that the rates are market rates while the actual
+> billing is self-serve-zero. Req IDs, matrix, and effort are unchanged.
+> The attempt-2 record is preserved in git history; the attempt-2 review
+> is at `.delivery/reviews/proposal-2026-07-28-attempt-2.md`.
 
 > **Revision log — attempt 2.** The proposal was re-opened on 2026-07-28 by the
 > operator to swap the WebSocket backend technology from Node.js to Python
@@ -178,16 +191,20 @@ a `FAIL` verdict.
 
 ### Review outcome
 
-`VERDICT: PASS`. The reviewer found no blockers and no non-blocking findings.
-The third attempt-2 review (the prior two returned FAIL on the slide content,
-the revision log, and the pre-asserted verdict in this same subsection — all
-addressed before this pass) confirms the technology swap is coherent across
-the data files, build activities, assumptions, slides, and architecture
-diagrams, the audit is green (90/0/0), the "Review outcome" subsection is no
-longer narrating a verdict before the review ran, and the preserved
-attempt-1 review is still on disk. The canonical review artifact for this
-attempt is `.delivery/reviews/proposal-2026-07-28.md`; the attempt-1 review
-remains at `.delivery/reviews/proposal-2026-07-28-attempt-1.md`.
+`VERDICT: PASS`. The second-pass reviewer found no blockers and no non-blocking
+findings. The first-pass reviewer had returned FAIL on four items (pre-asserted
+verdict in this subsection, stale Cost text on the slide page, two citation
+errors); all four were fixed before this pass. The rate correction is coherent
+across the data files, `COM-001`, the slide page, and the Excel workbooks
+(VROM slide shows € 37,500 total revenue). The audit is green (90/0/0), 17
+Req IDs and the matrix are unchanged, build effort is preserved, and the
+preserved review trail is intact.
+
+**Preserved review trail:**
+
+- Attempt 1 (Node.js backend, 1 review pass, PASS): `.delivery/reviews/proposal-2026-07-28-attempt-1.md`
+- Attempt 2 (Node.js → Python, 3 review passes — 2 FAIL then PASS): `.delivery/reviews/proposal-2026-07-28-attempt-2.md`
+- Attempt 3 (rates EUR 0 → market, 2 review passes — 1 FAIL then PASS): `.delivery/reviews/proposal-2026-07-28.md`
 
 ## Proposal gate
 
@@ -201,6 +218,51 @@ self-serve engagement the operator accepts; the trail records the same.
 | Reviewed | date the scope's fresh-eyes review passed (helper-stamped) |
 
 ## Revisions
+
+### Attempt 3 — 2026-07-28 — Resource rates: EUR 0 → market rates
+
+| Field | Attempt 2 | Attempt 3 |
+| --- | --- | --- |
+| Delivery Manager rate | EUR 0 | EUR 280/day |
+| Solution Architect rate | EUR 0 | EUR 360/day |
+| Tech Lead rate | EUR 0 | EUR 360/day |
+| QA Engineer rate | EUR 0 | EUR 250/day |
+| Quote output | Zero (misleading) | Meaningful market-rate quote |
+| `COM-001` | "Resource rates are zero, by design" | "Market rates drive the quote; billing is self-serve-zero" |
+| Customer-asked requirements | 17 Req IDs | 17 Req IDs (unchanged) |
+| Build effort (P1 + P2) | 45 + 18 MD | 45 + 18 MD (unchanged) |
+| Audit | 90 passed, 0 failed | 90 passed, 0 failed (re-run) |
+| Adversarial review | VERDICT PASS | (this attempt; see below) |
+
+**Rationale.** A UI review of the resource plan showed every `Rate Day`
+cell was `EUR 0`. The estimation engine derives the quote and financial
+model from the rate column, so zero rates produced a zero quote — which
+is misleading even when the engagement is self-serve. The fix sets the
+rates to market values (matching the estimatekit scaffold's defaults)
+and updates `COM-001` to record that the rates are the basis for any
+future commercial comparison while the actual billing for this
+self-serve engagement is zero.
+
+**Files changed on the estimatekit instance.**
+
+- `data/activities/P1-resource.tsv` — `Rate Day` column: `EUR 0` → market rates (DM 280, SA 360, TL 360, QA 250).
+- `data/activities/P2-resource.tsv` — same.
+- `data/assumptions/02-assumptions.tsv` — `COM-001` retitled to "Market rates drive the quote; billing is self-serve-zero" and the body now names the four market rates and the self-serve-zero billing.
+- `data/slides/executive-summary.tsv` — the customer-facing `Highlight → Cost` row changed from "Best-effort: personal engagement, no professional services rates" to "Self-serve engagement — market rates drive the quote, actual billing is zero".
+- Architecture diagrams, build activities, BRD, matrix, project activities, config — all unchanged.
+
+**Re-run evidence.**
+
+- Audit re-run after the rate change: 90 passed, 0 failed, 0 skipped.
+- Generation re-run: `roadmap`, `excel`, `slides` all `true`. The Excel quote and financial model now carry the new numbers (VROM slide shows € 37,500 total revenue, GM 30%).
+- **Stale-cache note (operational learning, not a scope defect).** The first `estimatekit_generate_artifacts` call after the rate change returned success but did not rebuild the executive-summary slide page — the generated `output/slides/pages/02-executive-summary.md` still carried the old "Best-effort: personal engagement, no professional services rates" Cost row even though the source TSV was already updated. The auditor does not check generated page content for cross-consistency with data files. A second `generate_artifacts` call rebuilt the page correctly. For any future re-open: call `generate_artifacts` twice when changing data that flows into the slide pages, or assert the page content matches the data after generation.
+- Adversarial review re-run: see `.delivery/reviews/proposal-2026-07-28.md` (attempt 3) and the "Adversarial review" section above.
+
+**What this is NOT.** This is not a customer-driven scope change (the
+verbatim ask is unchanged). It is a parameter correction in the
+estimation data so the artifacts the estimation engine produces are
+meaningful. The previous attempt-2 review (now preserved at
+`.delivery/reviews/proposal-2026-07-28-attempt-2.md`) is unaffected.
 
 ### Attempt 2 — 2026-07-28 — WebSocket backend: Node.js → Python (FastAPI)
 
