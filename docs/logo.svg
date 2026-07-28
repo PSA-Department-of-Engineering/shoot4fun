@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 160" role="img" aria-label="Shoot4Fun" font-family="Russo One, Bungee, Impact, system-ui, sans-serif">
+  <title>Shoot4Fun</title>
+  <desc>SHOOT4FUN wordmark with a circular crosshair mark on the left. Brand primary coral-red (#F94B1F, the HSL→hex of `--primary: 12 95% 55%`) on warm off-white (#F5F2EF, the HSL→hex of `--background: 30 25% 95%`). Use this as the primary lockup; the monogram at docs/logo-monogram.svg is the favicon.</desc>
+
+  <!-- Background plate (transparent by default; this rect is a guide, set fill="none" in production) -->
+  <rect x="0" y="0" width="600" height="160" fill="none"/>
+
+  <!-- Mark: circular crosshair (centered at 80, 80, radius 44) -->
+  <g transform="translate(80 80)" fill="none" stroke="#F94B1F" stroke-width="8" stroke-linecap="round">
+    <!-- outer ring -->
+    <circle r="44"/>
+    <!-- NSEW tick marks: from ring to 14px short of ring -->
+    <line x1="-62" y1="0" x2="-22" y2="0"/>
+    <line x1="22"  y1="0" x2="62"  y2="0"/>
+    <line x1="0" y1="-62" x2="0" y2="-22"/>
+    <line x1="0" y1="22"  x2="0" y2="62"/>
+    <!-- center dot -->
+    <circle r="6" fill="#F94B1F" stroke="none"/>
+  </g>
+
+  <!-- Wordmark: SHOOT 4 FUN -->
+  <!-- One <text> row, with the "4" in brand primary for the crosshair echo -->
+  <text x="170" y="105"
+        font-size="76"
+        font-weight="900"
+        letter-spacing="2"
+        fill="#221D1C">SHOOT<tspan dx="6" fill="#F94B1F">4</tspan><tspan dx="6" fill="#221D1C">FUN</tspan></text>
+</svg>
