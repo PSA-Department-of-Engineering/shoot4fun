@@ -6,12 +6,21 @@ gate: proposal
 signed: 2026-07-28
 reviewed: 2026-07-28
 run: shoot4fun-2026-07-28
-attempt: 1
+attempt: 2
 mode: interactive
 started: 2026-07-28T00:00:00Z
 finished:
 credential_ref: estimatekit-mcp
 ---
+
+> **Revision log — attempt 2.** The proposal was re-opened on 2026-07-28 by the
+> operator to swap the WebSocket backend technology from Node.js to Python
+> (FastAPI). Reason: the team's skills and the PSA platform's other backend
+> services are Python; Node.js was an off-pattern choice that the first
+> attempt's scope recorded by default. See the "Revisions" section below for
+> the diff and the rationale; the customer-asked requirements (17 Req IDs,
+> matrix, effort) are unchanged. The previous review is preserved at
+> `.delivery/reviews/proposal-2026-07-28-attempt-1.md`.
 
 # Proposal — shoot4fun
 
@@ -70,7 +79,7 @@ A live estimatekit project backs this scope. The proposal record points at it;
 | Project slug | `shoot4fun` |
 | API | `POST /api/projects/shoot4fun/audit`, `POST /api/projects/shoot4fun/generate` |
 | Deck URL | `https://estimatekit.chaos-architect.dev/projects/shoot4fun/slides/` |
-| Audit status | `passed: true` (90 passed, 0 failed, 0 skipped at scope-close) |
+| Audit status | `passed: true` (90 passed, 0 failed, 0 skipped; re-confirmed at attempt 2 after the technology revision) |
 | Generation | `roadmap`, `excel`, `slides` all `true` |
 
 ## Requirement spine
@@ -169,10 +178,16 @@ a `FAIL` verdict.
 
 ### Review outcome
 
-`VERDICT: PASS`. The reviewer found no blockers; seven non-blocking completeness
-observations were resolved in this record and the assumption file before the
-gate closed. The reviewed date in the record frontmatter is the date the
-fresh-eyes review was run.
+`VERDICT: PASS`. The reviewer found no blockers and no non-blocking findings.
+The third attempt-2 review (the prior two returned FAIL on the slide content,
+the revision log, and the pre-asserted verdict in this same subsection — all
+addressed before this pass) confirms the technology swap is coherent across
+the data files, build activities, assumptions, slides, and architecture
+diagrams, the audit is green (90/0/0), the "Review outcome" subsection is no
+longer narrating a verdict before the review ran, and the preserved
+attempt-1 review is still on disk. The canonical review artifact for this
+attempt is `.delivery/reviews/proposal-2026-07-28.md`; the attempt-1 review
+remains at `.delivery/reviews/proposal-2026-07-28-attempt-1.md`.
 
 ## Proposal gate
 
@@ -184,6 +199,51 @@ self-serve engagement the operator accepts; the trail records the same.
 | Status | `gate` once the record is in gate-ready form |
 | Signed | date the operator accepts (helper-stamped) |
 | Reviewed | date the scope's fresh-eyes review passed (helper-stamped) |
+
+## Revisions
+
+### Attempt 2 — 2026-07-28 — WebSocket backend: Node.js → Python (FastAPI)
+
+| Field | Attempt 1 | Attempt 2 |
+| --- | --- | --- |
+| Backend technology | Node.js + ws | Python (FastAPI) + uvicorn |
+| Authoritative tick loop | `setInterval`-driven | `asyncio` task-driven |
+| Match state machine | Node.js in-memory | Python in-memory (asyncio.Lock) |
+| Team-skill alignment | Off-pattern | Team-canonical (PSA FastAPI) |
+| Platform alignment | Off-pattern (no other Node backend in PSA Foundry) | Aligned (task-api, alexandria, others) |
+| Customer-asked requirements | 17 Req IDs | 17 Req IDs (unchanged) |
+| Build effort (P1 + P2) | 45 + 18 MD | 45 + 18 MD (unchanged) |
+| Audit | 90 passed, 0 failed | 90 passed, 0 failed (re-run) |
+| Adversarial review | VERDICT PASS, 7 non-blocking resolved | (this attempt; see below) |
+
+**Rationale.** The team's skills are Python (REF-Python, REF-FastAPI,
+REF-CleanArchitecture) and the PSA platform's other backend services are all
+Python/FastAPI. Node.js was an off-pattern default that attempt 1 inherited
+from the estimatekit scaffold. The swap aligns the scope with the
+`bootstrap-hexagonal-backend` skill (which scaffolds a Python/FastAPI
+hexagonal backend) and removes the only language split in the stack.
+
+**Files changed on the estimatekit instance.**
+
+- `data/architecture/P1-components.tsv` — `WebSocket Server` technology: `Node.js + ws` → `Python (FastAPI) + uvicorn`; `Authoritative Tick Loop` technology: `Node.js` → `Python asyncio`; `Match State Machine` technology: `Node.js in-memory` → `Python in-memory (asyncio)`.
+- `data/activities/P1-build.tsv` — `BUILD-BE-001` now names the FastAPI ASGI app and uvicorn entrypoint; `BUILD-BE-002` now names the asyncio tick task; `BUILD-BE-003` now names `asyncio.Lock` for shared state.
+- `data/assumptions/02-assumptions.tsv` — `PERF-001` retitled to "Single FastAPI instance handles 2–4 players" and its body now names Python/FastAPI/uvicorn; `DEP-001`'s body now names the FastAPI WebSocket server workload (its `Short Title` "PSA Foundry hosts client + server" is unchanged, only the body was updated to name the new image).
+- `data/slides/executive-summary.tsv` — the customer-facing `Rationale → Backend` row changed from `Node.js + ws WebSocket server` to `Python (FastAPI) + uvicorn WebSocket server (asyncio tick loop, server-authoritative)`. **Correction:** the attempt-2 revision log first claimed this file was unchanged; the attempt-2 fresh-eyes review caught the miss, the file was edited, and the slides pipeline was re-generated. The corrected file is the one persisted and re-generated now.
+- Architecture PUML diagrams, `00-guidelines.tsv`, `project.yaml`, and `data/slides/notes.tsv` were unchanged: none named a backend language. (The diagram label `WebSocket Server` is generic; the speaker notes are also generic.)
+
+**Re-run evidence.**
+
+- Audit re-run after the swap: 90 passed, 0 failed, 0 skipped.
+- Generation re-run: `roadmap`, `excel`, `slides` all `true`.
+- Adversarial review re-run: see `.delivery/reviews/proposal-2026-07-28.md` (attempt 2) and the "Adversarial review" section above.
+
+**What this is NOT.** This is not a customer-driven scope change (the
+verbatim ask is unchanged); the customer's request did not name a backend
+language. This is an architecture refinement, recorded in the scope per
+`REF-Delivery.md` §1 ("An operator re-opens a phase, deliberately sending
+the line back to an earlier gate").
+
+---
 
 This record is the only artifact of the scope phase. `.delivery/proposal.md` is
 ephemeral: drained by `reconcile-delivery` when the run closes (§1).
