@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/pyproject.toml /app/
-COPY backend/shoot4fun_backend /app/shoot4fun_backend
+COPY pyproject.toml /app/
+COPY shoot4fun_backend /app/shoot4fun_backend
 
 RUN pip install --upgrade pip && pip install /app
 
