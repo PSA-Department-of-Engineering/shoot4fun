@@ -90,6 +90,7 @@ class MatchService(MatchServicePort):
 
     async def disconnect(self, room_id: str, player_id: str) -> None:
         lock = self._lock_for(room_id)
+        lobby_snapshot: dict | None = None
         async with lock:
             room = self.rooms.get(room_id)
             if room is None:
@@ -97,10 +98,19 @@ class MatchService(MatchServicePort):
             room.remove_player(player_id)
             if not room.players:
                 self.rooms.delete(room.id)
+            elif room.state is MatchState.LOBBY:
+                lobby_snapshot = room.snapshot()
         await self.broadcaster.send_to_room(
             room_id,
             {"type": "player_left", "player_id": player_id},
         )
+        # Clients track the room only from snapshot messages, so refresh the
+        # remaining lobby: otherwise the departed player still counts toward
+        # all_ready() on the host's screen and Start match reads wrong.
+        if lobby_snapshot is not None:
+            await self.broadcaster.send_to_room(
+                room_id, {"type": "lobby_state", "room": lobby_snapshot}
+            )
         self.broadcaster.unbind(player_id)
         _log.info("player_disconnected room=%s player=%s", room_id, player_id)
 

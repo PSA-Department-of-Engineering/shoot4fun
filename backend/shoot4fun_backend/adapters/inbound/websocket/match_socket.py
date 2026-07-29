@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from fastapi import WebSocket, WebSocketDisconnect
 
 from shoot4fun_backend.domain.exceptions.room_full_error import RoomFullError
+from shoot4fun_backend.domain.model.match_state import MatchState
 from shoot4fun_backend.logging import get_logger
 
 if TYPE_CHECKING:
@@ -50,7 +51,7 @@ async def handle_match_socket(
             await websocket.close(code=code, reason=reason)
 
         try:
-            player_id, _snapshot = await service.connect(room_id, name)
+            player_id, snapshot = await service.connect(room_id, name)
         except RoomFullError as exc:
             await websocket.send_json(
                 {"type": "error", "code": "ROOM_FULL", "detail": str(exc)}
@@ -61,6 +62,19 @@ async def handle_match_socket(
         await broadcaster.send_to(
             player_id, {"type": "hello", "player_id": player_id}
         )
+        # The client learns which room it joined only from a snapshot message,
+        # and while the room sits in LOBBY the tick loop broadcasts nothing
+        # (MatchService.tick_all sends only for PLAYING/RESULTS). Without this
+        # the client's onState never fires, so the lobby never renders and no
+        # player can ready up or start the match: the scene stays an empty sky
+        # behind a default HUD. Sent to the whole room rather than the joiner
+        # alone, so existing players see the arrival and the host's all-ready
+        # gate recomputes; the player_joined broadcast inside connect() cannot
+        # do this, as it runs before the joiner is bound.
+        if snapshot.get("state") == MatchState.LOBBY.value:
+            await broadcaster.send_to_room(
+                room_id, {"type": "lobby_state", "room": snapshot}
+            )
 
         while True:
             raw = await websocket.receive_text()
