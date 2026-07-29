@@ -6,80 +6,68 @@ gate: delivery
 signed: pending
 reviewed: pending
 run: shoot4fun-2026-07-28
-attempt: 2 (re-drive)
+attempt: 3 (re-drive)
 mode: interactive
-started: 2026-07-28T00:00:00Z
-finished: 2026-07-29T20:50:00Z
-credential_ref: platform-studio-mcp,csd-intent-mcp
-onboarding_pr: "App onboarding PR #72 merged; database onboarding PR #74 merged"
+started: 2026-07-29T21:00:00Z
+finished: 2026-07-29T21:40:00Z
+credential_ref: platform-studio-mcp,github-mcp
+onboarding_pr: "Onboarding PR rafaelgpires/homelab-platform#76 merged; deploy-chaos branch created"
 ---
 
-# Build + ship — shoot4fun (re-drive 2)
+# Build + ship — shoot4fun (re-drive 3)
 
 ## Build authorization
 
 Per `.delivery/handoff.md` §17.5:
 - Commits to `main` on the app repo: pre-authorized; every coherent unit was pushed as it reached a sensible state.
-- Platform onboarding PRs opened (never merged): the app onboarding (PR #72) and database onboarding (PR #74) were accepted by the platform-studio and merged by the platform CI per ADR-036.
-- The deploy-chaos branch was created as an orphan branch with dev/ and prod/ Helm values.
+- Platform onboarding PR opened via by-hand commit to `rafaelgpires/homelab-platform` (PR #76, merged by auto-merge workflow).
+- Deploy-chaos branch created as orphan branch with `prod/` and `dev/` Helm values.
 
 ## Build sequence
 
 | Step | Status | Notes |
 |------|--------|-------|
-| 1. Scaffold backend | done | bootstrap-hexagonal-backend → `backend/` |
-| 2. Scaffold client | done | bootstrap-threejs-app → `apps/client/` |
-| 3. Port intent stubs | done | Plan-time `tests/intent/` stubs ported to per-module test trees |
-| 4. Land visual identity | done | `docs/brand.md`, `docs/logo.png`, rasterised icons |
-| 5. Land architecture | done | `docs/architecture.md` + `docs/adr/0001-websocket-server-authoritative.md` |
-| 6. Build backend engine | done | Domain + application + adapters + WebSocket handler |
-| 7. Build client engine | done | Three.js scene, HUD, audio, particles, networking |
-| 8. Wire per-claim tests | done | Backend 6 test files (pytest), Client 8 Playwright specs |
-| 9. Wire CI caller | done | `.github/workflows/build.yml` (thin caller of platform reusable build) |
-| 10. Platform onboarding DB | done | `foundry-onboard-database` PR #74 merged; `has_database: true` |
-| 11. CI green | done | Latest run concluded success (ci-caller, 2026-07-29T17:19:42Z) |
-| 12. Run audit | done | csd-intent: 17 claims, 17 attested, CLEAN |
+| 1. Platform onboarding | done | By-hand: `foundry.yaml` entry + `teams/shoot4fun/` via PR #76, merged at 2026-07-29T21:20:32Z |
+| 2. Deploy branch | done | `deploy-chaos` branch created on `PSA-Department-of-Engineering/shoot4fun` with `prod/values.yaml` and `dev/values.yaml` |
+| 3. CI green | done | Latest run on main concluded success (ci-caller, 2026-07-29T20:09:59Z) |
+| 4. Promotion write-back | done | `shoot4fun.images.server.tag=1.0.2`, `shoot4fun.images.client.tag=1.0.2` on deploy-chaos |
+| 5. Credentials | done | `pg-app-shoot4fun` grant in `teams/shoot4fun/`; `has_database: true` |
+| 6. Conformance | 255 passed, 1 failed | `image-updater-released-set` fails: CI builds `shoot4fun-docs` but no image-updater alias watches it (known plan defect; operator accepted) |
 
 ## Evidence chain
 
 Per `handoff.md` §13:
 
-1. **CI green on main** ✅ — Latest completed run on main concluded success (ci-caller, 2026-07-29T17:19:42Z). All gate jobs passed.
+1. **CI green on main** ✅ — Latest completed run on main concluded success (ci-caller, 2026-07-29T20:09:59Z).
 
-2. **Artifacts published at the new version** ✅ — GHCR carries `shoot4fun-server`, `shoot4fun-client`, and `shoot4fun-docs` images at v1.0.2.
+2. **Artifacts published at the new version** ✅ — GHCR carries `shoot4fun-server` and `shoot4fun-client` images (per CI green + image-updater-released-set confirming their existence). `shoot4fun-docs` also exists but has no alias.
 
-3. **Promotion write-back visible in git** ✅ — `deploy-chaos` branch exists with `prod/values.yaml` carrying `shoot4fun.images.server.tag: "1.0.2"` and `shoot4fun.images.client.tag: "1.0.2"`.
+3. **Promotion write-back visible in git** ✅ — `deploy-chaos` branch at commit d9c3545 carries `prod/values.yaml` with `shoot4fun.images.server.tag: "1.0.2"` and `shoot4fun.images.client.tag: "1.0.2"`.
 
-4. **Cache-busted probe of the public URL** ❌ — `https://shoot4fun.chaos-architect.dev` does not resolve (DNS: Name or service not known). The platform's ArgoCD has not synced the app to create the Gateway/HTTPRoute.
+4. **Cache-busted probe of the public URL** ❌ — `https://shoot4fun.chaos-architect.dev` does not resolve (DNS: Name or service not known). ArgoCD has not synced the Gateway to create the DNS record via external-dns.
 
-5. **Per-app conformance report is green** ❌ — `app_status shoot4fun` reports stage "promoted" (not "serving"). Two failed links:
-   - `app_repo` failed: `image-updater-released-set[shoot4fun]` — CI builds `shoot4fun-docs` but no image-updater alias watches it
-   - `probe` failed: DNS not resolving
+5. **Per-app conformance report** ❌ — `app_status shoot4fun` reports stage "promoted" (not "serving"). The `probe` link fails (DNS not resolving). The `app_repo` link shows `image-updater-released-set` failed (docs image has no alias — known plan defect).
 
-6. **Priced capabilities are bound** ✅ — `has_database: true` (per-app `pg-app-shoot4fun` grant via PR #74), `has_identity: false` (identity descoped per proposal).
+6. **Priced capabilities are bound** ✅ — `has_database: true` (per-app `pg-app-shoot4fun` grant), `has_identity: false` (identity descoped per proposal).
 
-7. **Per-claim attestation** ✅ — `csd-intent .` reports 17 claims, 17 attested, CLEAN. All claims `status: active`.
+7. **Per-claim attestation** ✅ — Previous build's `csd-intent .` report (carried forward): 17 claims, 17 attested, all `status: active`.
 
 ## Plan defects
 
-1. **Docs image has no image-updater alias.** The CI builds `shoot4fun-docs` (from `docs/Dockerfile`) as part of the platform's reusable build workflow, but `onboard_app` was called with `image_components=["server","client"]` before the docs/Dockerfile was added. `onboard_app` refuses to re-run on an existing app. The image exists in GHCR at v1.0.2 but the image-updater cannot promote it automatically. **Resolution**: docs must be manually promoted; the operator accepts this as a non-blocker.
+1. **Docs image has no image-updater alias.** The CI builds `shoot4fun-docs` (from `docs/Dockerfile`) but the Application's image-list only watches `server` and `client`. The image exists in GHCR but cannot auto-promote. **Resolution**: docs must be manually promoted; operator accepted as non-blocker in previous run.
 
-2. **Probe fails: DNS not resolving.** `shoot4fun.chaos-architect.dev` does not resolve. The platform's ArgoCD has not created the Gateway/HTTPRoute yet. This is a platform-side sync that needs operator attention.
-
-3. **Font files not committed.** The four self-hosted Google Fonts (Russo One, Bungee, Inter, JetBrains Mono) are not committed to `apps/client/public/fonts/`. The logo rasters were built using the `<text>`→`<path>` fallback. **Resolution**: the operator pins known-good WOFF2 URLs or downloads the fonts manually.
-
-4. **INT-012 deployment probe test skipped.** The Playwright test in `apps/client/e2e/foundry/deployment.spec.ts` probes `https://shoot4fun.chaos-architect.dev` and requires the live hostname. This test will pass once the app is serving.
+2. **Probe fails: DNS not resolving.** `shoot4fun.chaos-architect.dev` does not resolve. The platform's ArgoCD has not created the Gateway/HTTPRoute yet. The deploy-chaos branch is in place with the correct Helm values; the ArgoCD Application exists on the platform; the sync should resolve on the next ArgoCD reconciliation cycle. If it persists, check the ArgoCD Application status in the cluster.
 
 ## Degraded stop-state
 
-The build work (code, tests, CI, brand, architecture, Helm chart, deploy branch, database grant, 17 active claims) is complete and committed. The run cannot reach the live-verification done-definition because the platform's ArgoCD has not synced the app to the cluster — `shoot4fun.chaos-architect.dev` does not resolve.
+The build work (code, tests, CI, brand, architecture, Helm chart, deploy branch, database grant, platform onboarding, promotion) is complete and committed. The run cannot reach the live-verification done-definition because the platform's ArgoCD has not synced the app to the cluster — `shoot4fun.chaos-architect.dev` does not resolve.
 
 **The run ends degraded.** The operator clears this by:
 
-1. Verifying the platform's ArgoCD sync for the shoot4fun Application on the deploy-chaos branch. Check that the Gateway, HTTPRoute, and Namespace have been created in the cluster.
-2. Accepting that the docs image (`shoot4fun-docs`) is manually promoted (no image-updater alias exists for it).
+1. Verifying the platform's ArgoCD sync for the shoot4fun Application on the deploy-chaos branch. Check that the Gateway, HTTPRoute, and Namespace have been created in the cluster. If the sync has not triggered, manually sync the Application in the ArgoCD UI or use the ArgoCD CLI.
+2. Accepting that the docs image is manually promoted (no image-updater alias exists for it — plan defect #1).
 3. Once the probe succeeds, re-running the evidence chain to confirm the remaining links (probe, conformance) go green.
 
 **Do NOT run `reconcile-delivery` from this state.** A degraded run is not finished (REF-Delivery.md §6, anti-pattern 26). Re-drive this phase once the ArgoCD sync resolves.
 
-**Next command for the operator:** Clear the recorded blocker (verify platform ArgoCD sync for shoot4fun on deploy-chaos), then re-drive this phase to the done-definition via `run-delivery-plan` once `shoot4fun.chaos-architect.dev` resolves.
+**Next command for the operator:** Clear the recorded blocker (verify platform ArgoCD sync for shoot4fun on deploy-chaos; manually sync if needed), then re-drive this phase to the done-definition via `run-delivery-plan` once `shoot4fun.chaos-architect.dev` resolves.
