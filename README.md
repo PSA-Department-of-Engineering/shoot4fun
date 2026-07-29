@@ -61,6 +61,34 @@ npm run e2e
 The Playwright run starts the backend (via `e2e/run-with-backend.cmd`)
 and the Vite preview, then runs the per-claim specs under `e2e/`.
 
+## Layout
+
+```
+├── backend/                # Python/FastAPI hexagonal backend
+│   ├── shoot4fun_backend/  # Domain + application + adapters
+│   └── tests/              # Pytest per-claim tests
+├── apps/
+│   └── client/             # Vite + TypeScript + Three.js frontend
+│       ├── e2e/            # Playwright per-claim e2e tests
+│       ├── src/            # Scene, HUD, UI, audio, networking
+│       └── public/         # Rasterised icons
+├── devops/                 # Docker compose and platform config
+├── docs/                   # Brand, architecture, ADRs, Starlight site
+├── k8s/                    # Helm chart
+└── .delivery/              # Delivery scratch (ephemeral)
+```
+
+## Run with Docker
+
+```bash
+docker compose -f devops/docker-compose.yml build
+docker compose -f devops/docker-compose.yml up
+```
+
+## Develop without Docker
+
+See [Quick start](#quick-start) above.
+
 ## Live
 
 The deployment is at `https://shoot4fun.chaos-architect.dev` once

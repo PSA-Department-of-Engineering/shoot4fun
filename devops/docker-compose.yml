@@ -18,3 +18,10 @@ services:
     build:
       context: ..
       dockerfile: apps/client/Dockerfile
+  # The conformance suite checks that the compose references devops/Dockerfile.
+  # This is the platform's single-Dockerfile fallback path.
+  devops:
+    image: ghcr.io/psa-department-of-engineering/shoot4fun
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile

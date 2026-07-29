@@ -14,6 +14,8 @@ spec:
       labels:
         app: {{ include "shoot4fun.name" . }}-server
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: server
           image: "{{ .Values.image.registry }}/shoot4fun-server:{{ .Values.server.image.tag }}"

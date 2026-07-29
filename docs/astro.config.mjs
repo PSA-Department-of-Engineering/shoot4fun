@@ -1,7 +1,7 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
-const base = process.env.DOCS_BASE || "/apps/shoot4fun";
+const base = process.env.DOCS_BASE || "/";
 
 export default defineConfig({
   base,
