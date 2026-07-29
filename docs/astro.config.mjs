@@ -1,10 +1,8 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
-const base = process.env.DOCS_BASE || "/";
-
 export default defineConfig({
-  base,
+  base: process.env.DOCS_BASE || "/",
   site: "https://shoot4fun.chaos-architect.dev",
   integrations: [
     starlight({
