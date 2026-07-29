@@ -1,0 +1,24 @@
+# Shoot4Fun — dev environment (deploy-chaos)
+paused: false
+
+shoot4fun:
+  images:
+    server:
+      tag: ""
+    client:
+      tag: ""
+
+server:
+  image:
+    tag: ""
+  replicas: 1
+
+client:
+  image:
+    tag: ""
+  replicas: 1
+
+leaderboard:
+  database:
+    enabled: false
+    secretName: pg-app-shoot4fun

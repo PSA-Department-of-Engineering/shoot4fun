@@ -1,0 +1,6 @@
+apiVersion: v2
+name: shoot4fun
+description: A simple multiplayer Three.js shooter
+type: application
+version: 0.1.0
+appVersion: 0.1.0
