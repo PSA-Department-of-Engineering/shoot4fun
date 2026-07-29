@@ -1,27 +1,69 @@
 # Shoot4Fun Helm values (REF-Homelab §4)
+
+# Platform-owned operational toggle (REF-Foundry §4 "Pause"): scales every
+# non-docs workload to zero. Apps ship running.
 paused: false
 
-image:
-  registry: ghcr.io/psa-department-of-engineering
-  pullPolicy: Always
+# One entry per released image, in the canonical images.<component> layout the
+# platform's Image Updater bindings write (ghcr package shoot4fun-<component>,
+# tag at images.<component>.tag). This chart is pinned as a dependency named
+# shoot4fun by the deploy branch's umbrella, so Helm delivers the branch's
+# shoot4fun.images.<component>.tag here with the prefix stripped. The tags below
+# are placeholders: the deploy branch pins the live ones and Image Updater moves
+# them on every release.
+images:
+  server:
+    repository: ghcr.io/psa-department-of-engineering/shoot4fun-server
+    tag: "1.0.2"
+  client:
+    repository: ghcr.io/psa-department-of-engineering/shoot4fun-client
+    tag: "1.0.2"
+  docs:
+    repository: ghcr.io/psa-department-of-engineering/shoot4fun-docs
+    tag: "1.0.2"
+
+imagePullPolicy: Always
+
+# Materialized in-namespace by the platform pull-secret reflection.
+imagePullSecrets:
+  - name: ghcr-pull
 
 server:
-  image:
-    tag: ""
   replicas: 1
   port: 8000
 
+# The client's nginx serves the built scene and reverse-proxies /api/ and /ws/ to
+# shoot4fun-server:8000 in-cluster (apps/client/nginx.conf), so the app's
+# HTTPRoute needs this one backend only. nginx listens on 8080 (its Dockerfile
+# EXPOSEs 8080), while the Service publishes the conventional 80.
 client:
-  image:
-    tag: ""
   replicas: 1
   port: 80
+  containerPort: 8080
+
+docs:
+  replicas: 1
+  port: 80
+
+# The app's own Gateway is provisioned by the platform team manifest at
+# onboarding, named for the app and living in the network namespace; the
+# HTTPRoute only parentRefs it.
+gateway:
+  name: shoot4fun
+  namespace: network
+hostname: shoot4fun.chaos-architect.dev
 
 # No auth for shoot4fun (identity is descoped)
 auth:
   existingSecret: ""
 
-leaderboard:
-  database:
-    enabled: false
-    secretName: pg-app-shoot4fun
+# The leaderboard's Postgres database on the platform's shared instance, reached
+# with the platform-minted per-app credential. Off by default so the chart still
+# installs standalone (the backend then falls back to its in-memory leaderboard);
+# the deploy branch turns it on, which is where the credential actually exists.
+database:
+  enabled: false
+  secret: pg-app-shoot4fun
+  host: shared-rw.databases.svc.cluster.local
+  port: 5432
+  name: shoot4fun

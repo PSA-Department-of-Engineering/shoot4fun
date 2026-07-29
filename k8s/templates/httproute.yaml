@@ -1,0 +1,22 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "shoot4fun.name" . }}
+  labels:
+    app: {{ include "shoot4fun.name" . }}
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      # The app's own platform Gateway lives in the network namespace; without
+      # this line the ref defaults to the app namespace, no Gateway accepts the
+      # route, and external-dns registers nothing for the hostname.
+      namespace: {{ .Values.gateway.namespace }}
+  hostnames:
+    - {{ .Values.hostname }}
+  rules:
+    # One backend only: the client's nginx serves the built scene and
+    # reverse-proxies /api/ and /ws/ to shoot4fun-server:8000 in-cluster
+    # (apps/client/nginx.conf), so the server needs no route of its own.
+    - backendRefs:
+        - name: {{ include "shoot4fun.name" . }}-client
+          port: {{ .Values.client.port }}

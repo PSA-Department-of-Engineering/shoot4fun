@@ -15,10 +15,30 @@ spec:
         app: {{ include "shoot4fun.name" . }}-server
     spec:
       imagePullSecrets:
-        - name: ghcr-pull
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
       containers:
         - name: server
-          image: "{{ .Values.image.registry }}/shoot4fun-server:{{ .Values.server.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: "{{ .Values.images.server.repository }}:{{ required "images.server.tag is empty; the deploy branch pins it" .Values.images.server.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
             - containerPort: {{ .Values.server.port }}
+          {{- if .Values.database.enabled }}
+          # DATABASE_URL is composed from the platform-minted credential
+          # (pg-app-shoot4fun, reflected into this namespace), which the backend's
+          # container reads to pick the Postgres leaderboard over the in-memory
+          # one. kubelet expands $(VAR) against env entries declared earlier in
+          # this same container, so the password is never written into a manifest.
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.secret }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.secret }}
+                  key: password
+            - name: DATABASE_URL
+              value: postgresql://$(PGUSER):$(PGPASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}
+          {{- end }}

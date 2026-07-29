@@ -15,10 +15,10 @@ spec:
         app: {{ include "shoot4fun.name" . }}-client
     spec:
       imagePullSecrets:
-        - name: ghcr-pull
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
       containers:
         - name: client
-          image: "{{ .Values.image.registry }}/shoot4fun-client:{{ .Values.client.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: "{{ .Values.images.client.repository }}:{{ required "images.client.tag is empty; the deploy branch pins it" .Values.images.client.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: {{ .Values.client.port }}
+            - containerPort: {{ .Values.client.containerPort }}

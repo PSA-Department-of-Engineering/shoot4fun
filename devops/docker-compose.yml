@@ -4,8 +4,9 @@ name: shoot4fun
 # the single source of truth. The reusable build workflow reads this file
 # and pushes every service that has a build: section as
 # $REG/<image>:<semver>. The platform's image-updater then binds each
-# image to a Helm value via the multi-image shape
-# (image_components=["server", "client"]).
+# image to a Helm value via the multi-image shape. The docs image is not listed
+# here: the build workflow derives shoot4fun-docs from docs/Dockerfile, and the
+# platform binds all three (image_components=["server", "client", "docs"]).
 
 services:
   server:
