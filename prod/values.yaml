@@ -1,0 +1,10 @@
+shoot4fun:
+  images:
+    server:
+      tag: 1.0.2
+      repository: ghcr.io/psa-department-of-engineering/shoot4fun-server
+    client:
+      tag: 1.0.2
+      repository: ghcr.io/psa-department-of-engineering/shoot4fun-client
+  database:
+    secret: pg-app-shoot4fun
