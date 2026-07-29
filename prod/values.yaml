@@ -5,18 +5,18 @@ paused: false
 shoot4fun:
   images:
     server:
-      tag: ""
+      tag: "1.0.2"
     client:
-      tag: ""
+      tag: "1.0.2"
 
 server:
   image:
-    tag: ""
+    tag: "1.0.2"
   replicas: 1
 
 client:
   image:
-    tag: ""
+    tag: "1.0.2"
   replicas: 1
 
 leaderboard:
