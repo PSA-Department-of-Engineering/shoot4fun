@@ -1,13 +1,13 @@
 shoot4fun:
   images:
     server:
-      tag: 1.1.1
+      tag: 1.1.2
       repository: ghcr.io/psa-department-of-engineering/shoot4fun-server
     client:
-      tag: 1.1.1
+      tag: 1.1.2
       repository: ghcr.io/psa-department-of-engineering/shoot4fun-client
     docs:
-      tag: 1.1.1
+      tag: 1.1.2
       repository: ghcr.io/psa-department-of-engineering/shoot4fun-docs
   database:
     enabled: true
