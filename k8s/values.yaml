@@ -1,0 +1,27 @@
+# Shoot4Fun Helm values (REF-Homelab §4)
+paused: false
+
+image:
+  registry: ghcr.io/psa-department-of-engineering
+  pullPolicy: Always
+
+server:
+  image:
+    tag: ""
+  replicas: 1
+  port: 8000
+
+client:
+  image:
+    tag: ""
+  replicas: 1
+  port: 80
+
+# No auth for shoot4fun (identity is descoped)
+auth:
+  existingSecret: ""
+
+leaderboard:
+  database:
+    enabled: false
+    secretName: pg-app-shoot4fun

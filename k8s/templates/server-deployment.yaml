@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shoot4fun.name" . }}-server
+  labels:
+    app: {{ include "shoot4fun.name" . }}-server
+spec:
+  replicas: {{ if .Values.paused }}0{{ else }}{{ .Values.server.replicas }}{{ end }}
+  selector:
+    matchLabels:
+      app: {{ include "shoot4fun.name" . }}-server
+  template:
+    metadata:
+      labels:
+        app: {{ include "shoot4fun.name" . }}-server
+    spec:
+      containers:
+        - name: server
+          image: "{{ .Values.image.registry }}/shoot4fun-server:{{ .Values.server.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.server.port }}

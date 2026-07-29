@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shoot4fun.name" . }}-client
+  labels:
+    app: {{ include "shoot4fun.name" . }}-client
+spec:
+  replicas: {{ if .Values.paused }}0{{ else }}{{ .Values.client.replicas }}{{ end }}
+  selector:
+    matchLabels:
+      app: {{ include "shoot4fun.name" . }}-client
+  template:
+    metadata:
+      labels:
+        app: {{ include "shoot4fun.name" . }}-client
+    spec:
+      containers:
+        - name: client
+          image: "{{ .Values.image.registry }}/shoot4fun-client:{{ .Values.client.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.client.port }}

@@ -1,0 +1,25 @@
+# STARLIGHT intent bundle (bootstrap-starlight auto-applies this)
+version: "1.0.0"
+spec: CSD-INTENT-01
+
+INT-STARLIGHT-001:
+  version: "1.0.0"
+  status: active
+  statement: "docs/ ships a Dockefile and astro.config.* so the portal can deploy it."
+  derived_from: INT-HOMELAB-006
+  test:
+    scope: unit
+    component: DocsDeployable
+    type: invariant
+  criticality: high
+
+INT-STARLIGHT-002:
+  version: "1.0.0"  
+  status: active
+  statement: "docs/ carries an Overview page and a Reference page."
+  derived_from: INT-HOMELAB-010
+  test:
+    scope: unit
+    component: DocsPages
+    type: contract
+  criticality: high

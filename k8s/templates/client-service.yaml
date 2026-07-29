@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "shoot4fun.name" . }}-client
+  labels:
+    app: {{ include "shoot4fun.name" . }}-client
+spec:
+  selector:
+    app: {{ include "shoot4fun.name" . }}-client
+  ports:
+    - port: {{ .Values.client.port }}
+      targetPort: {{ .Values.client.port }}

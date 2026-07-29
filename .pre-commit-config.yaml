@@ -1,0 +1,8 @@
+# REF-Homelab §4: Conventional-Commit commit-msg hook (ADR-024)
+repos:
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.2.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: []
