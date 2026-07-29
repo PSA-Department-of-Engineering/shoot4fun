@@ -2,8 +2,8 @@ apiVersion: v2
 name: shoot4fun
 description: prod environment pin for shoot4fun (ADR-025 deploy branch).
 type: application
-version: 1.0.2
+version: 1.1.0
 dependencies:
   - name: shoot4fun
-    version: 1.0.2
+    version: 1.1.0
     repository: oci://ghcr.io/psa-department-of-engineering/charts
