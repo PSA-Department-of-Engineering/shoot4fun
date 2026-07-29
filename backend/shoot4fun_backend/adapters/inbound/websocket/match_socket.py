@@ -59,18 +59,22 @@ async def handle_match_socket(
             await websocket.close(code=4409, reason="room full")
             return
         broadcaster.bind(player_id, room_id, send_fn, close_fn)
+        # `room` is part of the hello contract (ServerMessage.hello carries an
+        # optional RoomSnapshot) and the client depends on it for two things:
+        # it renders the lobby off this snapshot, and it picks its own player
+        # out of snapshot.players to learn who it is. Omitting it left the
+        # client with no room and no identity, so no lobby appeared, the host
+        # never recognised itself as host, and nobody could start a match --
+        # the scene stayed an empty sky behind a default HUD.
         await broadcaster.send_to(
-            player_id, {"type": "hello", "player_id": player_id}
+            player_id,
+            {"type": "hello", "player_id": player_id, "room": snapshot},
         )
-        # The client learns which room it joined only from a snapshot message,
-        # and while the room sits in LOBBY the tick loop broadcasts nothing
-        # (MatchService.tick_all sends only for PLAYING/RESULTS). Without this
-        # the client's onState never fires, so the lobby never renders and no
-        # player can ready up or start the match: the scene stays an empty sky
-        # behind a default HUD. Sent to the whole room rather than the joiner
-        # alone, so existing players see the arrival and the host's all-ready
-        # gate recomputes; the player_joined broadcast inside connect() cannot
-        # do this, as it runs before the joiner is bound.
+        # Existing players also need their lobby re-rendered for the new
+        # arrival, so the host's all-ready gate recomputes. player_joined only
+        # syncs meshes and never reaches the surface handlers, and while the
+        # room sits in LOBBY the tick loop broadcasts nothing at all
+        # (MatchService.tick_all sends only for PLAYING/RESULTS).
         if snapshot.get("state") == MatchState.LOBBY.value:
             await broadcaster.send_to_room(
                 room_id, {"type": "lobby_state", "room": snapshot}

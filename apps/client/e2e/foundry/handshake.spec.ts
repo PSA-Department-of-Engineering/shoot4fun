@@ -17,7 +17,7 @@
  * Run against a deployment (BASE_URL suppresses the local webServer):
  *   BASE_URL=https://shoot4fun.chaos-architect.dev npx playwright test e2e/foundry
  */
-import { expect, type Browser, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import { intent } from '../intent-shim';
 
 const HOST =
@@ -36,15 +36,22 @@ async function openPlayer(browser: Browser, room: string, name: string): Promise
     );
     const page = await context.newPage();
     await page.goto(`${HOST}/#/${room}`);
-    // The overlay is added after the socket opens; it covers the lobby.
-    const overlay = page.locator('text=Click to play');
-    if (await overlay.isVisible({ timeout: 8000 }).catch(() => false)) {
-        await overlay.click();
+    /* The click-to-play overlay is appended once the socket opens, and it
+     * covers the surface, so it has to go before any lobby control is
+     * clickable. It may never appear (offline fallback), hence the catch. */
+    const overlay = page.getByText('Click to play');
+    await overlay.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+    if ((await overlay.count()) > 0) {
+        await overlay.click().catch(() => {});
     }
     return page;
 }
 
 intent('INT-011', 'two_players_can_ready_up_and_start_a_match_in_the_browser', async ({ browser }) => {
+    /* Two browser contexts, each loading the real deployment over the network
+     * and waiting on server round-trips, does not fit the suite's 60s default. */
+    test.setTimeout(180_000);
+
     const room = 'E2E' + Date.now().toString(36).slice(-5).toUpperCase();
 
     const host = await openPlayer(browser, room, 'e2e-host');
