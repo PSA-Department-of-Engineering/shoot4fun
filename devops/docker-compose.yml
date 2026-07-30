@@ -18,6 +18,11 @@ services:
     build:
       context: ..
       dockerfile: apps/client/Dockerfile
+  docs:
+    image: ghcr.io/psa-department-of-engineering/shoot4fun-docs
+    build:
+      context: ../docs
+      dockerfile: Dockerfile
 
 # The conformance suite checks that the compose references devops/Dockerfile.
 x-ref: devops/Dockerfile

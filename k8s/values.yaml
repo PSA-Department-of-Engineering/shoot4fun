@@ -15,6 +15,11 @@ client:
   image:
     tag: ""
   replicas: 1
+  port: 8080
+
+docs:
+  image:
+    tag: ""
   port: 80
 
 # No auth for shoot4fun (identity is descoped)

@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shoot4fun.name" . }}-docs
+  labels:
+    app: {{ include "shoot4fun.name" . }}-docs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "shoot4fun.name" . }}-docs
+  template:
+    metadata:
+      labels:
+        app: {{ include "shoot4fun.name" . }}-docs
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: docs
+          image: "{{ .Values.image.registry }}/shoot4fun-docs:{{ .Values.docs.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.docs.port }}
