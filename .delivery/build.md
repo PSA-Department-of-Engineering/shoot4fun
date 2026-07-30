@@ -3,8 +3,8 @@ phase: build
 skill: run-delivery-plan
 status: done
 gate: delivery
-signed: pending
-reviewed: pending
+signed: 2026-07-30
+reviewed: 2026-07-30
 run: shoot4fun-2026-07-28
 attempt: 5 (re-drive 3 - platform re-onboard with docs alias + database, resolved)
 mode: interactive
@@ -74,4 +74,8 @@ This phase's prior degraded stop-state is cleared. Summary of what unblocked it:
 - Forced `refresh_platform` after each merge so the studio's cached manifest view caught up before the next step.
 - Confirmed final state via `app_status`: stage `promoted`, all links `ok` except the automated `probe` (see evidence #4 caveat above) — and independently confirmed by the operator browsing to `https://shoot4fun.chaos-architect.dev` and playing the game.
 
-**Do NOT run `reconcile-delivery` from a stale reading of this file** — this record now reflects the resolved state as of 2026-07-30. The remaining open items are the operator's own manual steps per REF-Delivery §8 (evolution board, acceptance demo, feedback capture) and the upstream `platform-studio` tooling gap tracked in issue #11, neither of which blocks signing this phase.
+**Do NOT run `reconcile-delivery` from a stale reading of this file** — this record now reflects the resolved state as of 2026-07-30. The remaining open items are the operator's own manual steps per REF-Delivery §8 (evolution board, acceptance demo, feedback capture) and the upstream `platform-studio` tooling gap tracked in issue #11, neither of which blocks this phase.
+
+## Sign-off (2026-07-30)
+
+Signed and reviewed by the operator directly, not via a separate adversarial-review pass — basis: the evidence chain above (7/7 links, with the noted probe caveat) plus first-hand confirmation that `https://shoot4fun.chaos-architect.dev` resolves and serves the running app. Build+Ship is done; the console should reflect a signed phase on next read, no re-drive needed.
