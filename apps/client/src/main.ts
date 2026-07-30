@@ -96,7 +96,7 @@ if (forceOffline) {
             overlay.style.display = "flex";
             overlay.style.alignItems = "center";
             overlay.style.justifyContent = "center";
-            overlay.innerHTML = `<div class="card" style="text-align:center;"><h1>SHOOT4FUN</h1><p>Click to play</p></div>`;
+            overlay.innerHTML = `<div class="card" style="text-align:center;"><h1 class="wordmark">SHOOT4FUN</h1><p>Click to play</p></div>`;
             document.body.appendChild(overlay);
             overlay.addEventListener("click", () => {
                 overlay.remove();
