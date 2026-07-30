@@ -61,14 +61,18 @@ Per `handoff.md` §13:
 
 ## Degraded stop-state
 
-The Helm chart fix (docs deployment + service templates + docs in compose + deploy-chaos values) is committed and pushed on main. The deploy-chaos branch values already carry docs. Re-onboarding with `image_components=["server","client","docs"]` via the platform-studio MCP is required to add the image-updater alias for the docs image. Without the MCP, the re-onboarding cannot be driven non-manually.
+The platform-studio MCP server is down. All Helm chart and compose fixes are committed and pushed on main (docs deployment + service templates, docs in docker-compose.yml, k8s/values.yaml uses `images.docs.{repository,tag}` layout, deploy-chaos branch values already carry docs at tag 1.1.3).
 
-**The run remains degraded.** The two blockers are:
-1. Platform-studio MCP not reachable (plan defect #3) → must be available for non-manual onboarding
-2. DNS not resolving (plan defect #2) → ArgoCD sync pending on the cluster
+The run cannot proceed until the platform-studio MCP is reachable, because:
+1. Re-onboarding with `image_components=["server","client","docs"]` requires the `homelab-onboard-app` skill, which drives the platform's onboarding studio over its MCP (the MCP is the server that's down).
+2. Without re-onboarding, the image-updater has no alias for `shoot4fun-docs` and ArgoCD won't sync the Gateway/HTTPRoute for DNS.
 
-**To clear and re-drive:**
-1. Ensure the platform-studio MCP is connected to this builder session
-2. Run `homelab-onboard-app shoot4fun` (or `foundry-onboard-app`) with `image_components=["server","client","docs"]` to add the docs alias and re-sync ArgoCD
-3. Wait for ArgoCD to sync and DNS to resolve
-4. Re-run the evidence chain to confirm the remaining links (probe, conformance) go green
+**Do NOT run `reconcile-delivery` from this state.** A degraded run is not finished (REF-Delivery.md §6, anti-pattern 26). Re-drive this phase once the platform-studio MCP server is back.
+
+**Next command when the server is up:**
+1. Connect the platform-studio MCP to this builder session
+2. Run `homelab-onboard-app shoot4fun` (or `foundry-onboard-app shoot4fun`) with `image_components=["server","client","docs"]`
+3. Wait for the onboarding PR to merge and for ArgoCD to sync the Application on the deploy-chaos branch
+4. Verify `https://shoot4fun.chaos-architect.dev` resolves and serves the app
+5. Re-run the evidence chain (§13) to confirm all seven links go green
+6. Update this build record with the verification results
