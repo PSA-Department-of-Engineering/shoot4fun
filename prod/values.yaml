@@ -1,27 +1,14 @@
-# Shoot4Fun — prod environment (deploy-chaos)
-# The image-updater writes <app>.images.<component>.tag here on each release.
-paused: false
-
 shoot4fun:
   images:
     server:
-      tag: "1.0.2"
+      tag: 1.1.3
+      repository: ghcr.io/psa-department-of-engineering/shoot4fun-server
     client:
-      tag: "1.0.2"
+      tag: 1.1.3
+      repository: ghcr.io/psa-department-of-engineering/shoot4fun-client
     docs:
-      tag: "1.0.2"
-
-server:
-  image:
-    tag: "1.0.2"
-  replicas: 1
-
-client:
-  image:
-    tag: "1.0.2"
-  replicas: 1
-
-leaderboard:
+      tag: 1.1.3
+      repository: ghcr.io/psa-department-of-engineering/shoot4fun-docs
   database:
-    enabled: false
-    secretName: pg-app-shoot4fun
+    enabled: true
+    secret: pg-app-shoot4fun

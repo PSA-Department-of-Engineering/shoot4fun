@@ -1,6 +1,9 @@
 apiVersion: v2
 name: shoot4fun
-description: A simple multiplayer Three.js shooter
+description: dev environment pin for shoot4fun (ADR-025 deploy branch).
 type: application
 version: 1.0.2
-appVersion: 1.0.2
+dependencies:
+  - name: shoot4fun
+    version: 1.0.2
+    repository: oci://ghcr.io/psa-department-of-engineering/charts
