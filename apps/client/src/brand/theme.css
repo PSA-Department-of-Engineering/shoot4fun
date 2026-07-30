@@ -3,6 +3,40 @@
  * The same HSL values flow into the 3D scene via src/brand/tokens.ts.
  */
 
+/* Self-hosted per design.md §1.2 / brand.md "Typography" — no runtime
+ * Google Fonts @import. */
+@font-face {
+    font-family: "Russo One";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/fonts/russo-one.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Bungee";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/fonts/bungee.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/fonts/inter.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "JetBrains Mono";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/fonts/jetbrains-mono.woff2") format("woff2");
+}
+
 :root {
     --background: 30 25% 95%;
     --foreground: 15 10% 12%;
@@ -23,6 +57,9 @@
     --ring: 12 95% 55%;
     --radius: 0.5rem;
     --font-sans: "Inter", system-ui, sans-serif;
+    --font-display: "Bungee", var(--font-sans);
+    --font-wordmark: "Russo One", var(--font-display);
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 * {
@@ -90,6 +127,11 @@ body {
     font-size: 1.5rem;
     margin: 0 0 0.5rem 0;
     color: hsl(var(--primary));
+}
+
+.card h1.wordmark {
+    font-family: var(--font-wordmark);
+    font-weight: 400;
 }
 
 .card h2 {
@@ -181,8 +223,8 @@ body {
 }
 
 .hud-number {
-    font-family: var(--font-sans);
-    font-weight: 900;
+    font-family: var(--font-display);
+    font-weight: 400;
     color: hsl(var(--foreground));
     text-shadow: 0 0 2px hsl(var(--background)), 0 0 1px hsl(var(--background));
 }
@@ -251,8 +293,9 @@ body {
     justify-content: center;
     background: hsl(var(--background) / 0.55);
     color: hsl(var(--primary));
+    font-family: var(--font-display);
     font-size: 64px;
-    font-weight: 900;
+    font-weight: 400;
 }
 
 .hud-respawn[data-visible="true"] {

@@ -88,7 +88,7 @@ function renderLobby(ctx: SurfaceContext): string {
         )
         .join("");
     return `
-        <h1>ROOM <span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">${room.id}</span></h1>
+        <h1>ROOM <span style="font-family: var(--font-mono);">${room.id}</span></h1>
         <p>Share the room code with another player to start a match.</p>
         <h2>Players (${room.players.length} / 4)</h2>
         <div class="grid-2">${playerCards}</div>
@@ -141,7 +141,7 @@ function renderSettings(_ctx: SurfaceContext): string {
         <h2>Mouse</h2>
         <label>Sensitivity <input class="input" type="range" min="0.0005" max="0.005" step="0.0001" value="${sensitivity}" data-sensitivity></label>
         <h2>Keybinds</h2>
-        <p style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">W A S D — move · Mouse — look · Click — fire · 1 / 2 — weapon · R — reload · ESC — pause · M — master mute · S — SFX mute</p>
+        <p style="font-family: var(--font-mono);">W A S D — move · Mouse — look · Click — fire · 1 / 2 — weapon · R — reload · ESC — pause · M — master mute · S — SFX mute</p>
         <div class="row" style="margin-top:1rem; gap:.5rem;">
             <button class="btn" data-close>Close</button>
         </div>
