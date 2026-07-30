@@ -118,7 +118,7 @@ function renderResults(ctx: SurfaceContext): string {
         .join("");
     const isHost = room.host_id === ctx.localPlayerId;
     return `
-        <h1>MATCH OVER</h1>
+        <h1 class="wordmark">MATCH OVER</h1>
         <p>${room.winner ? `Winner: ${escapeHtml(sorted[0]?.name ?? "?")}` : "No winner."}</p>
         <div style="display:flex; flex-direction:column; gap:.5rem; margin-top:1rem;">${rows}</div>
         <div class="row" style="margin-top:1rem; gap:.5rem;">

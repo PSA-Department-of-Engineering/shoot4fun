@@ -131,7 +131,11 @@ body {
 
 .card h1.wordmark {
     font-family: var(--font-wordmark);
-    font-weight: 400;
+    /* Locked at 900 (design.md §1.2 / brand.md "Typography"). Russo One
+     * ships only a 400-weight file, so the browser synthesizes the bolder
+     * cut; that matches the locked value rather than silently downgrading
+     * it to the file's native weight. */
+    font-weight: 900;
 }
 
 .card h2 {
