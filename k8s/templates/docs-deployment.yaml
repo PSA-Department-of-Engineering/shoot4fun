@@ -5,7 +5,9 @@ metadata:
   labels:
     app: {{ include "shoot4fun.name" . }}-docs
 spec:
-  replicas: 1
+  # Not gated on .Values.paused: pausing scales the app's workloads to zero but
+  # leaves the docs served (REF-Foundry §4 "Pause": off is not offboard).
+  replicas: {{ .Values.docs.replicas }}
   selector:
     matchLabels:
       app: {{ include "shoot4fun.name" . }}-docs
@@ -13,12 +15,21 @@ spec:
     metadata:
       labels:
         app: {{ include "shoot4fun.name" . }}-docs
+        # Homepage derives this app's docs tile pod-status selector from the docs
+        # HTTPRoute name, looking for app.kubernetes.io/name=<chart>-docs in the
+        # app namespace. Without the -docs suffix set inline here the pod is never
+        # found and the tile renders NOT FOUND while the docs serve fine
+        # (INT-HOMELAB-048).
+        app.kubernetes.io/name: {{ .Chart.Name }}-docs
+        app.kubernetes.io/component: docs
     spec:
       imagePullSecrets:
-        - name: ghcr-pull
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
       containers:
         - name: docs
-          image: "{{ .Values.image.registry }}/shoot4fun-docs:{{ .Values.docs.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: "{{ .Values.images.docs.repository }}:{{ required "images.docs.tag is empty; the deploy branch pins it" .Values.images.docs.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: {{ .Values.docs.port }}
+            # The docs image is nginx serving the Starlight build under
+            # /apps/shoot4fun (docs/Dockerfile bakes DOCS_BASE), on port 80.
+            - containerPort: 80

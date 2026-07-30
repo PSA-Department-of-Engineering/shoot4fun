@@ -1,7 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "shoot4fun.name" . }}-docs
+  # Literal DNS-1035 label matching the backendRef the platform's docs HTTPRoute
+  # already targets (teams/shoot4fun/routes.yaml names shoot4fun-docs), so this
+  # must be that literal rather than a template expression.
+  name: shoot4fun-docs
   labels:
     app: {{ include "shoot4fun.name" . }}-docs
 spec:
@@ -9,4 +12,4 @@ spec:
     app: {{ include "shoot4fun.name" . }}-docs
   ports:
     - port: {{ .Values.docs.port }}
-      targetPort: {{ .Values.docs.port }}
+      targetPort: 80

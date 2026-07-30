@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from fastapi import WebSocket, WebSocketDisconnect
 
 from shoot4fun_backend.domain.exceptions.room_full_error import RoomFullError
+from shoot4fun_backend.domain.model.match_state import MatchState
 from shoot4fun_backend.logging import get_logger
 
 if TYPE_CHECKING:
@@ -50,7 +51,7 @@ async def handle_match_socket(
             await websocket.close(code=code, reason=reason)
 
         try:
-            player_id, _snapshot = await service.connect(room_id, name)
+            player_id, snapshot = await service.connect(room_id, name)
         except RoomFullError as exc:
             await websocket.send_json(
                 {"type": "error", "code": "ROOM_FULL", "detail": str(exc)}
@@ -58,9 +59,26 @@ async def handle_match_socket(
             await websocket.close(code=4409, reason="room full")
             return
         broadcaster.bind(player_id, room_id, send_fn, close_fn)
+        # `room` is part of the hello contract (ServerMessage.hello carries an
+        # optional RoomSnapshot) and the client depends on it for two things:
+        # it renders the lobby off this snapshot, and it picks its own player
+        # out of snapshot.players to learn who it is. Omitting it left the
+        # client with no room and no identity, so no lobby appeared, the host
+        # never recognised itself as host, and nobody could start a match --
+        # the scene stayed an empty sky behind a default HUD.
         await broadcaster.send_to(
-            player_id, {"type": "hello", "player_id": player_id}
+            player_id,
+            {"type": "hello", "player_id": player_id, "room": snapshot},
         )
+        # Existing players also need their lobby re-rendered for the new
+        # arrival, so the host's all-ready gate recomputes. player_joined only
+        # syncs meshes and never reaches the surface handlers, and while the
+        # room sits in LOBBY the tick loop broadcasts nothing at all
+        # (MatchService.tick_all sends only for PLAYING/RESULTS).
+        if snapshot.get("state") == MatchState.LOBBY.value:
+            await broadcaster.send_to_room(
+                room_id, {"type": "lobby_state", "room": snapshot}
+            )
 
         while True:
             raw = await websocket.receive_text()

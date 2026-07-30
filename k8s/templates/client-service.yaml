@@ -8,5 +8,7 @@ spec:
   selector:
     app: {{ include "shoot4fun.name" . }}-client
   ports:
+    # nginx inside the image listens on containerPort (8080); the Service
+    # publishes the conventional 80, which the app's HTTPRoute targets.
     - port: {{ .Values.client.port }}
-      targetPort: {{ .Values.client.port }}
+      targetPort: {{ .Values.client.containerPort }}
