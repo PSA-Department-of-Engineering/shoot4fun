@@ -136,6 +136,9 @@ body {
      * cut; that matches the locked value rather than silently downgrading
      * it to the file's native weight. */
     font-weight: 900;
+    /* Locked at 56-76px (design.md §1.2 / brand.md "Typography"); otherwise
+     * this inherits .card h1's 1.5rem (24px) card-heading size. */
+    font-size: 4rem;
 }
 
 .card h2 {
