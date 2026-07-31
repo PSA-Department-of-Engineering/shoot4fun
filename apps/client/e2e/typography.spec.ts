@@ -61,14 +61,21 @@ test('the Wordmark role renders at the locked family and weight', async ({ page 
     expect(style.fontSize).toBeLessThanOrEqual(76);
 });
 
-test('the HUD display numbers render in the locked Bungee face', async ({ page }) => {
+test('the HUD display numbers render in the locked Bungee face at the locked size', async ({ page }) => {
     await page.goto('/?offline=1');
     // The HUD mounts unconditionally (src/ui/Hud.ts), so its real
     // .hud-number elements are in the DOM without a live match.
-    const fontFamily = await page
-        .locator('[data-ammo]')
-        .evaluate((el) => getComputedStyle(el).fontFamily);
-    expect(fontFamily).toContain('Bungee');
+    for (const selector of ['[data-ammo]', '[data-health-number]']) {
+        const style = await page.locator(selector).evaluate((el) => {
+            const computed = getComputedStyle(el);
+            return { fontFamily: computed.fontFamily, fontSize: parseFloat(computed.fontSize) };
+        });
+        expect(style.fontFamily).toContain('Bungee');
+        // Locked at 28-40px (design.md §1.2 / brand.md "Typography"; the
+        // accessibility bar's hard floor is >=24px, handoff.md §8).
+        expect(style.fontSize).toBeGreaterThanOrEqual(28);
+        expect(style.fontSize).toBeLessThanOrEqual(40);
+    }
 });
 
 test('room code and keybind-hint text render in the locked JetBrains Mono face', async ({ page }) => {

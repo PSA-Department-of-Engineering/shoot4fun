@@ -259,6 +259,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    font-size: 32px;
 }
 
 .hud-health-bar {
