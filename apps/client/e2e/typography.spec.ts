@@ -45,13 +45,20 @@ test('the Wordmark role renders at the locked family and weight', async ({ page 
         document.body.appendChild(card);
         const h1 = card.querySelector('h1.wordmark') as HTMLElement;
         const computed = getComputedStyle(h1);
-        const result = { fontFamily: computed.fontFamily, fontWeight: computed.fontWeight };
+        const result = {
+            fontFamily: computed.fontFamily,
+            fontWeight: computed.fontWeight,
+            fontSize: parseFloat(computed.fontSize),
+        };
         card.remove();
         return result;
     });
 
     expect(style.fontFamily).toContain('Russo One');
     expect(style.fontWeight).toBe('900');
+    // Locked at 56-76px (design.md §1.2 / brand.md "Typography").
+    expect(style.fontSize).toBeGreaterThanOrEqual(56);
+    expect(style.fontSize).toBeLessThanOrEqual(76);
 });
 
 test('the HUD display numbers render in the locked Bungee face', async ({ page }) => {
