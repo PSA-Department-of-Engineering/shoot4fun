@@ -69,8 +69,14 @@ Rasters produced by `@resvg/resvg-js` with the WOFF2 fonts in the
 build context; the fallback (`<text>`→`<path>`) is used when the
 font isn't resolvable at build time. Output files:
 
-- `apps/client/public/favicon.ico` (32×32, from monogram)
 - `apps/client/public/apple-touch-icon.png` (180×180, from monogram)
 - `apps/client/public/icon-192.png` (PWA, from monogram)
 - `apps/client/public/icon-512.png` (PWA splash, from monogram)
 - `docs/logo.png` (600×160, from wordmark — README header)
+
+The browser-tab favicon is `apps/client/public/favicon.svg` (the
+monogram SVG, linked directly by `index.html` — no rasterisation
+step), not a rasterised `.ico`. The supported browser matrix is
+modern evergreen only (Chrome, Edge, Firefox, Safari current), which
+reads SVG favicons natively; `resvg-js` also has no built-in `.ico`
+container output. `.ico` is wontfixed (#4).
