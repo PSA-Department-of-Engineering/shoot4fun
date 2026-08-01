@@ -58,6 +58,12 @@ at runtime; the four WOFF2 files live in `apps/client/public/fonts/`.
 | Body | Inter | 400–600 | 14–16 px |
 | Mono (codes) | JetBrains Mono | 500 | 18–24 px |
 
+The **Wordmark** role applies to two surfaces in the build: the
+"SHOOT4FUN" splash lockup (`apps/client/src/main.ts`) and the "MATCH
+OVER" results banner (`apps/client/src/ui/Surface.ts`). There is no
+standalone kill-count-header surface — per-match kill counts render in
+the HUD at the **HUD display** scale, not the Wordmark role.
+
 ## Logo
 
 | Asset | Path | Source | License |
