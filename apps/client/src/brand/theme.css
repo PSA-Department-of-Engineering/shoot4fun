@@ -1,6 +1,10 @@
 /* Shoot4Fun brand theme.
  * Locked at .delivery/design.md §1.1 (full 19-key shadcn set).
  * The same HSL values flow into the 3D scene via src/brand/tokens.ts.
+ *
+ * Everything below reads a token. A literal colour anywhere in the
+ * client, in CSS or in markup, is a defect: the palette is the brand,
+ * and one that only mostly holds cannot be restyled.
  */
 
 /* Self-hosted per design.md §1.2 / brand.md "Typography": no runtime
@@ -60,6 +64,43 @@
     --font-display: "Bungee", var(--font-sans);
     --font-wordmark: "Russo One", var(--font-display);
     --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* The two sides, matching the player materials in the arena
+     * (brand.md "3D-scene colour bindings"). */
+    --team-1: 12 95% 55%;
+    --team-2: 195 100% 50%;
+
+    /* Rhythm. Every gap and pad in the build is one of these. */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --space-7: 3rem;
+
+    --radius-sm: calc(var(--radius) - 0.25rem);
+    --radius-lg: calc(var(--radius) * 2);
+    --radius-pill: 999px;
+
+    --shadow-sm: 0 1px 2px hsl(var(--foreground) / 0.06);
+    --shadow-md: 0 6px 16px hsl(var(--foreground) / 0.1);
+    --shadow-lg: 0 24px 60px hsl(var(--foreground) / 0.18);
+
+    /* Stacking, top to bottom: the arena, the HUD over it, the gate over
+     * a match, menus over everything, settings over the menus. */
+    --z-scene: 0;
+    --z-hud: 10;
+    --z-gate: 15;
+    --z-menu: 20;
+    --z-modal: 30;
+
+    --duration-fast: 90ms;
+    --duration-base: 170ms;
+    --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+    --focus-ring:
+        0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
 }
 
 * {
@@ -74,18 +115,30 @@ body {
     background: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
+:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: var(--radius-sm);
+}
+
+/* ------------------------------------------------------------- the scene */
+
 #app {
     position: fixed;
     inset: 0;
+    z-index: var(--z-scene);
     background: hsl(var(--background));
 }
 
-#scene-canvas {
+#scene-canvas,
+#app > canvas {
     position: fixed;
     inset: 0;
     display: block;
@@ -93,147 +146,864 @@ body {
     height: 100%;
 }
 
-[data-scene-ready="false"] #scene-canvas {
+/* Nothing is shown until the renderer has drawn a frame, so the first
+ * thing on screen is the arena rather than a black rectangle. */
+[data-scene-ready="false"] #scene-canvas,
+#app[data-scene-ready="false"] > canvas {
     visibility: hidden;
 }
 
-/* Lobby, results, settings (DOM surfaces; INT-011) */
-.surface {
+/* ------------------------------------------------------------ menu shell */
+
+/* Menus sit in the world rather than replacing it: the arena stays
+ * visible and lit behind them. */
+.menu {
     position: fixed;
     inset: 0;
+    z-index: var(--z-menu);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-4);
+    overflow-y: auto;
+    background:
+        radial-gradient(
+            120% 90% at 50% 0%,
+            hsl(var(--background) / 0.5),
+            hsl(var(--background) / 0.88)
+        );
+    backdrop-filter: blur(6px);
+}
+
+.appbar {
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    background: hsl(var(--background) / 0.95);
-    z-index: 20;
-}
-
-.card {
-    background: hsl(var(--card));
-    color: hsl(var(--card-foreground));
-    border: 1px solid hsl(var(--border));
-    border-top: 4px solid hsl(var(--primary));
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    max-width: 28rem;
+    gap: var(--space-3);
     width: 100%;
-    box-shadow: 0 12px 32px hsl(var(--foreground) / 0.08);
+    max-width: 62rem;
+    padding: var(--space-2) var(--space-1);
 }
 
-.card h1 {
-    font-family: var(--font-sans);
-    font-weight: 800;
-    font-size: 1.5rem;
-    margin: 0 0 0.5rem 0;
+.appbar__brand {
+    font-family: var(--font-wordmark);
+    font-size: 1.125rem;
+    letter-spacing: 0.06em;
     color: hsl(var(--primary));
 }
 
-.card h1.wordmark {
-    font-family: var(--font-wordmark);
-    /* Locked at 900 (design.md §1.2 / brand.md "Typography"). Russo One
-     * ships only a 400-weight file, so the browser synthesizes the bolder
-     * cut; that matches the locked value rather than silently downgrading
-     * it to the file's native weight. */
-    font-weight: 900;
-    /* Locked at 56-76px (design.md §1.2 / brand.md "Typography"); otherwise
-     * this inherits .card h1's 1.5rem (24px) card-heading size. */
-    font-size: 4rem;
+.appbar > .conn {
+    margin-left: auto;
 }
 
-.card h2 {
-    font-family: var(--font-sans);
+.menu__card {
+    margin: auto;
+    width: 100%;
+}
+
+.menu__card--narrow {
+    max-width: 28rem;
+}
+
+.menu__card--wide {
+    max-width: 52rem;
+}
+
+.card {
+    position: relative;
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+
+/* The brand's one stripe, at the top of every card. */
+.card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 4px;
+    background: linear-gradient(
+        90deg,
+        hsl(var(--primary)),
+        hsl(var(--accent))
+    );
+}
+
+.menu__header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
+}
+
+.menu__title {
+    margin: 0;
+    font-size: 1.75rem;
     font-weight: 700;
-    font-size: 1.125rem;
-    margin: 1.5rem 0 0.5rem 0;
+    letter-spacing: -0.01em;
 }
 
-.card p {
-    margin: 0.5rem 0;
+.menu__lead {
+    margin: 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9375rem;
+}
+
+.menu__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.menu__columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-5);
+    align-items: start;
+}
+
+.menu__footer {
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+    border-top: 1px solid hsl(var(--border));
+}
+
+/* The locked Wordmark role (design.md §1.2 / brand.md "Typography").
+ * Russo One ships one 400 file, so the browser synthesizes the 900 the
+ * brand fixes; the size stays inside the locked 56-76px at every width. */
+.wordmark {
+    margin: 0;
+    font-family: var(--font-wordmark);
+    font-weight: 900;
+    font-size: clamp(3.5rem, 8vw, 4.75rem);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    color: hsl(var(--primary));
+}
+
+/* The entry card is the narrowest surface the mark appears on, so it
+ * takes the locked floor there rather than the ceiling. */
+.menu__card--narrow .wordmark {
+    font-size: 3.5rem;
+}
+
+/* ---------------------------------------------------------------- panels */
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.panel__title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+}
+
+.panel__count {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.panel__empty {
+    margin: 0;
+    padding: var(--space-4);
+    border: 1px dashed hsl(var(--border));
+    border-radius: var(--radius);
     color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
+    text-align: center;
 }
+
+/* ----------------------------------------------------------------- atoms */
 
 .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.5rem 1rem;
+    gap: var(--space-2);
+    padding: 0.625rem var(--space-4);
     border-radius: var(--radius);
     border: 1px solid hsl(var(--border));
     background: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: var(--font-sans);
+    font-size: 0.9375rem;
     font-weight: 600;
+    line-height: 1.2;
     cursor: pointer;
-    transition: background 80ms;
+    transition:
+        background var(--duration-fast) var(--ease),
+        border-color var(--duration-fast) var(--ease),
+        transform var(--duration-fast) var(--ease);
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
     background: hsl(var(--muted));
 }
 
-.btn-primary {
-    background: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
-    border-color: hsl(var(--primary));
+.btn:active:not(:disabled) {
+    transform: translateY(1px);
 }
 
-.btn-primary:hover {
-    background: hsl(var(--primary) / 0.9);
-}
-
-.btn-primary:disabled {
+.btn:disabled {
     background: hsl(var(--muted));
     color: hsl(var(--muted-foreground));
     border-color: hsl(var(--muted));
     cursor: not-allowed;
 }
 
+.btn--block {
+    width: 100%;
+}
+
+.btn--primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+    box-shadow: var(--shadow-sm);
+}
+
+.btn--primary:hover:not(:disabled) {
+    background: hsl(var(--primary) / 0.88);
+    border-color: hsl(var(--primary) / 0.88);
+}
+
+.btn--ghost {
+    background: transparent;
+    border-color: transparent;
+    color: hsl(var(--muted-foreground));
+}
+
+.btn--ghost:hover:not(:disabled) {
+    background: hsl(var(--muted));
+    color: hsl(var(--foreground));
+}
+
+.btn--danger {
+    background: hsl(var(--destructive));
+    color: hsl(var(--destructive-foreground));
+    border-color: hsl(var(--destructive));
+}
+
 .input {
     display: block;
     width: 100%;
-    padding: 0.5rem 0.75rem;
+    padding: 0.625rem var(--space-3);
     border: 1px solid hsl(var(--input));
     border-radius: var(--radius);
     background: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: var(--font-sans);
+    font-size: 1rem;
+    transition: border-color var(--duration-fast) var(--ease);
+}
+
+.input:hover {
+    border-color: hsl(var(--muted-foreground) / 0.5);
+}
+
+.input::placeholder {
+    color: hsl(var(--muted-foreground) / 0.7);
+}
+
+.input--code {
+    font-family: var(--font-mono);
+    font-size: 1.375rem;
+    font-weight: 500;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    text-align: center;
+    padding-left: calc(var(--space-3) + 0.35em);
+}
+
+.range {
+    width: 100%;
+    height: 1.5rem;
+    background: transparent;
+    appearance: none;
+    cursor: pointer;
+}
+
+.range::-webkit-slider-runnable-track {
+    height: 0.375rem;
+    border-radius: var(--radius-pill);
+    background: hsl(var(--muted));
+}
+
+.range::-moz-range-track {
+    height: 0.375rem;
+    border-radius: var(--radius-pill);
+    background: hsl(var(--muted));
+}
+
+.range::-webkit-slider-thumb {
+    appearance: none;
+    margin-top: -0.4375rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: var(--radius-pill);
+    border: 2px solid hsl(var(--primary-foreground));
+    background: hsl(var(--primary));
+    box-shadow: var(--shadow-sm);
+}
+
+.range::-moz-range-thumb {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: var(--radius-pill);
+    border: 2px solid hsl(var(--primary-foreground));
+    background: hsl(var(--primary));
+    box-shadow: var(--shadow-sm);
+}
+
+.team-dot {
+    flex: none;
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: var(--radius-pill);
+    box-shadow: inset 0 0 0 1px hsl(var(--foreground) / 0.18);
+}
+
+.team-dot--1 {
+    background: hsl(var(--team-1));
+}
+
+.team-dot--2 {
+    background: hsl(var(--team-2));
+}
+
+.pill {
+    padding: 0.125rem var(--space-2);
+    border-radius: var(--radius-pill);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.pill--ready {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.pill--waiting {
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+}
+
+.status-dot {
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: var(--radius-pill);
+    background: hsl(var(--muted-foreground));
+}
+
+.status-dot[data-connection="open"] {
+    background: hsl(var(--primary));
+}
+
+.status-dot[data-connection="connecting"] {
+    background: hsl(var(--accent));
+    animation: pulse 1.1s var(--ease) infinite;
+}
+
+.status-dot[data-connection="closed"] {
+    background: hsl(var(--destructive));
+}
+
+@keyframes pulse {
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.room-code {
+    font-family: var(--font-mono);
+    font-size: 1.375rem;
+    font-weight: 500;
+    letter-spacing: 0.3em;
+    padding-left: 0.3em;
+    color: hsl(var(--foreground));
+}
+
+/* ------------------------------------------------------------- molecules */
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.field__label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+}
+
+.field__hint {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: hsl(var(--muted-foreground));
+}
+
+.conn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0.25rem var(--space-3);
+    border-radius: var(--radius-pill);
+    background: hsl(var(--card) / 0.7);
+    border: 1px solid hsl(var(--border));
+    font-size: 0.8125rem;
+    color: hsl(var(--muted-foreground));
+}
+
+.conn[data-connection="closed"] {
+    color: hsl(var(--destructive));
+    border-color: hsl(var(--destructive) / 0.4);
+}
+
+.conn__label {
+    font-weight: 600;
+}
+
+.conn__latency {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+}
+
+.invite {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--secondary));
+}
+
+.invite > .btn {
+    margin-left: auto;
+}
+
+.player-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--background));
+    font-size: 0.9375rem;
+}
+
+.player-row--you {
+    border-color: hsl(var(--primary) / 0.55);
+    background: hsl(var(--primary) / 0.06);
+}
+
+.player-row--empty {
+    justify-content: center;
+    border-style: dashed;
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+}
+
+.player-row__name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.player-row__tag {
+    padding: 0.0625rem var(--space-2);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius-pill);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+}
+
+.player-row__state {
+    margin-left: auto;
+}
+
+.map-option {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-4);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--background));
+    cursor: pointer;
+    transition:
+        border-color var(--duration-fast) var(--ease),
+        background var(--duration-fast) var(--ease);
+}
+
+.map-option:hover {
+    border-color: hsl(var(--muted-foreground) / 0.5);
+}
+
+.map-option[data-selected="true"] {
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.07);
+    box-shadow: inset 3px 0 0 hsl(var(--primary));
+}
+
+.map-option[data-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+/* The radio itself carries focus and keyboard traversal; the card is its
+ * label, so the ring is drawn around the card. */
+.map-option__input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.map-option:has(.map-option__input:focus-visible) {
+    box-shadow: var(--focus-ring);
+}
+
+.map-option__name {
+    font-weight: 700;
+}
+
+.map-option__blurb {
+    font-size: 0.8125rem;
+    color: hsl(var(--muted-foreground));
+}
+
+.score-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    font-size: 0.9375rem;
+}
+
+.score-row--first {
+    background: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.score-row--first .player-row__tag,
+.score-row--first .score-row__stat--muted {
+    color: inherit;
+    border-color: hsl(var(--primary-foreground) / 0.5);
+}
+
+/* The winner's row is filled in the primary, which is also one team's
+ * colour, so their dot needs an edge to stay a dot. */
+.score-row--first .team-dot {
+    box-shadow: 0 0 0 2px hsl(var(--primary-foreground));
+}
+
+.score-row__place {
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    min-width: 1.5rem;
+}
+
+.score-row__name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.score-row__stats {
+    display: flex;
+    gap: var(--space-3);
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.score-row__stat {
+    font-size: 0.8125rem;
+}
+
+.score-row__stat--muted {
+    color: hsl(var(--muted-foreground));
+}
+
+.setting {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.setting__header {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+}
+
+.setting__label {
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.setting__value {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: hsl(var(--muted-foreground));
+}
+
+/* -------------------------------------------------------------- organisms */
+
+.join {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.join__divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: hsl(var(--muted-foreground));
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.join__divider::before,
+.join__divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: hsl(var(--border));
+}
+
+.join__error {
+    margin: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius);
+    background: hsl(var(--destructive) / 0.12);
+    border: 1px solid hsl(var(--destructive) / 0.4);
+    color: hsl(var(--destructive));
     font-size: 0.875rem;
 }
 
-.input:focus {
-    outline: 2px solid hsl(var(--ring));
-    outline-offset: 1px;
+.roster,
+.scoreboard,
+.map-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
-.row {
+.record {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin: 0;
+    padding: var(--space-4);
+    border: 1px solid hsl(var(--accent));
+    border-radius: var(--radius);
+    background: hsl(var(--accent) / 0.16);
+}
+
+.record__holder {
+    font-size: 1.125rem;
+}
+
+.record__score {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.9375rem;
+    color: hsl(var(--muted-foreground));
+}
+
+.controls {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--space-3);
+    flex-wrap: wrap;
 }
 
-.grid-2 {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
+.controls__note {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
 }
 
-/* HUD */
+/* ---------------------------------------------------------------- modal */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+    overflow-y: auto;
+    background: hsl(var(--foreground) / 0.35);
+    backdrop-filter: blur(4px);
+}
+
+.modal__panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: 100%;
+    max-width: 28rem;
+    margin: auto;
+    padding: var(--space-6);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius-lg);
+    background: hsl(var(--card));
+    box-shadow: var(--shadow-lg);
+}
+
+.modal__title {
+    margin: 0;
+    font-size: 1.375rem;
+    font-weight: 700;
+}
+
+.modal__subtitle {
+    margin: var(--space-2) 0 0 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+}
+
+.modal__actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.keybinds {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin: 0;
+}
+
+.keybinds__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    font-size: 0.875rem;
+}
+
+.keybinds__key {
+    flex: none;
+    min-width: 6rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: hsl(var(--foreground));
+}
+
+.keybinds__action {
+    margin: 0;
+    color: hsl(var(--muted-foreground));
+}
+
+/* ---------------------------------------------------- the pointer-lock gate */
+
+/* Pointer lock is only grantable during a real user gesture, so this is
+ * the surface that carries the gesture: it stands over a running match
+ * whenever the game does not hold the mouse, and taking the lock is what
+ * dismisses it. It sits below the menus, which are meant to be used with
+ * a cursor. */
+.gate {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-gate);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-6);
+    background: hsl(var(--background) / 0.72);
+    backdrop-filter: blur(3px);
+    cursor: pointer;
+}
+
+.gate__card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+    text-align: center;
+}
+
+.gate__hint {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: hsl(var(--muted-foreground));
+}
+
+/* ------------------------------------------------------------------ HUD */
+
 .hud {
     position: fixed;
     inset: 0;
+    z-index: var(--z-hud);
     pointer-events: none;
     color: hsl(var(--foreground));
     font-family: var(--font-sans);
-    z-index: 10;
+    transition: opacity var(--duration-base) var(--ease);
+}
+
+/* Mounted between matches so its elements stay measurable, out of the
+ * way when there is no match to read them against. */
+.hud[data-active="false"] {
+    opacity: 0;
 }
 
 .hud-number {
     font-family: var(--font-display);
     font-weight: 400;
     color: hsl(var(--foreground));
-    text-shadow: 0 0 2px hsl(var(--background)), 0 0 1px hsl(var(--background));
+    text-shadow:
+        0 0 2px hsl(var(--background)),
+        0 0 1px hsl(var(--background));
+}
+
+.hud-number-small {
+    font-size: 28px;
 }
 
 .hud-secondary {
@@ -250,6 +1020,20 @@ body {
     transform: translate(-50%, -50%);
     width: 18px;
     height: 18px;
+}
+
+/* Dark under light: the pair has to read against sky, ground and a
+ * player's body alike. */
+.hud-crosshair-shadow {
+    stroke: hsl(var(--foreground));
+}
+
+.hud-crosshair-line {
+    stroke: hsl(var(--background));
+}
+
+.hud-crosshair-dot {
+    fill: hsl(var(--foreground));
 }
 
 .hud-health {
@@ -274,7 +1058,11 @@ body {
 .hud-health-fill {
     height: 100%;
     background: hsl(var(--primary));
-    transition: width 120ms;
+    transition: width 120ms var(--ease);
+}
+
+.hud-health-fill[data-low="true"] {
+    background: hsl(var(--destructive));
 }
 
 .hud-ammo {
@@ -310,47 +1098,18 @@ body {
     display: flex;
 }
 
-.leaderboard-row {
-    display: grid;
-    grid-template-columns: 2.5rem 1fr 5rem;
-    align-items: center;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius);
-    font-size: 16px;
-    border: 1px solid transparent;
-}
-
-.leaderboard-row.first {
-    background: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
-    border-color: hsl(var(--primary));
-}
-
-.leaderboard-row .place {
-    font-weight: 800;
-    color: inherit;
-}
-
-.muted-text {
-    color: hsl(var(--muted-foreground));
-}
-
-/* The pointer-lock gate. Pointer lock is only grantable during a real
- * user gesture, so this is the surface that carries the gesture: it is
- * up whenever a running match does not hold the mouse, and taking the
- * lock is what dismisses it. It sits below the lobby and results
- * surfaces, which are menus the player is meant to use with a cursor. */
-.gate {
-    position: fixed;
+.hud-hit {
+    position: absolute;
     inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    background: hsl(var(--background) / 0.82);
-    backdrop-filter: blur(3px);
-    cursor: pointer;
-    z-index: 15;
+    pointer-events: none;
+}
+
+/* Which way the shot came from. */
+.hud-hit-arrow {
+    opacity: 0.8;
+    fill: hsl(var(--destructive));
+    stroke: hsl(var(--foreground));
+    stroke-width: 1.5;
 }
 
 /* Confirmation that one of our own shots landed. Read at the centre of
@@ -367,8 +1126,8 @@ body {
     stroke: hsl(var(--foreground));
     pointer-events: none;
     transition:
-        opacity 90ms ease-out,
-        transform 90ms ease-out;
+        opacity var(--duration-fast) ease-out,
+        transform var(--duration-fast) ease-out;
 }
 
 .hud-hitmarker[data-visible="true"] {
@@ -385,21 +1144,35 @@ body {
     transform: translate(-50%, -50%) scale(1.25) rotate(45deg);
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .hud-hitmarker {
-        transition: none;
+/* ----------------------------------------------------------- narrow view */
+
+@media (max-width: 40rem) {
+    .menu__columns {
+        grid-template-columns: 1fr;
+    }
+
+    .card {
+        padding: var(--space-5);
+    }
+
+    .invite > .btn {
+        margin-left: 0;
+    }
+
+    /* Under the width that can hold the locked size, the mark scales to
+     * the screen instead of running off the card it sits in. */
+    .wordmark,
+    .menu__card--narrow .wordmark {
+        font-size: min(3.5rem, 12vw);
     }
 }
 
-.toast {
-    position: fixed;
-    top: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 0.5rem 1rem;
-    background: hsl(var(--destructive));
-    color: hsl(var(--destructive-foreground));
-    border-radius: var(--radius);
-    font-weight: 600;
-    z-index: 30;
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }

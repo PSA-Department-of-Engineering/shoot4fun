@@ -18,6 +18,13 @@
  * gesture. It can be refused, and the user can drop it at any time with
  * Escape, so the lock has a lifecycle with listeners rather than being
  * assumed once and forgotten.
+ *
+ * The lock is also what decides whether a keystroke is a movement key at
+ * all. Held, the mouse is the game's and WASD walks; released, the player
+ * is reading a menu, so the same keys are a name being typed into a field
+ * and an arrow walking a radio group. Reading the lock rather than the
+ * event's target keeps that rule in one place, here, instead of at every
+ * control that would otherwise have to defend itself.
  */
 
 export interface InputSnapshot {
@@ -73,6 +80,7 @@ export class InputController {
         window.addEventListener("mousemove", this.onMouseMove);
         window.addEventListener("mousedown", this.onMouseDown);
         window.addEventListener("mouseup", this.onMouseUp);
+        window.addEventListener("storage", this.onStorage);
         document.addEventListener("pointerlockchange", this.onLockChange);
     }
 
@@ -83,6 +91,7 @@ export class InputController {
         window.removeEventListener("mousemove", this.onMouseMove);
         window.removeEventListener("mousedown", this.onMouseDown);
         window.removeEventListener("mouseup", this.onMouseUp);
+        window.removeEventListener("storage", this.onStorage);
         document.removeEventListener("pointerlockchange", this.onLockChange);
         this.lockListeners.clear();
         this.held.clear();
@@ -122,6 +131,14 @@ export class InputController {
         if (Number.isFinite(value) && value > 0) this.sensitivity = value;
     }
 
+    /* The settings screen writes the stored key and announces it, the
+     * way `AudioEngine` is told about a volume. A player dragging the
+     * slider is aiming at the same time, so the change has to reach the
+     * live controller rather than the next page load. */
+    private onStorage = (event: StorageEvent): void => {
+        if (event.key === SENSITIVITY_KEY) this.sensitivity = readSensitivity();
+    };
+
     /** The current intent. Sampled once per rendered frame. */
     sample(): InputSnapshot {
         return {
@@ -160,6 +177,7 @@ export class InputController {
     }
 
     private onKeyDown = (event: KeyboardEvent): void => {
+        if (!this.locked) return;
         const movement = MOVEMENT_BY_CODE[event.code];
         if (movement) {
             this.held.add(movement);

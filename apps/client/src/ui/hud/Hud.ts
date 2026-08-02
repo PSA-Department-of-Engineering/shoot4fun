@@ -1,13 +1,22 @@
 /* HUD overlay.
- * Renders crosshair, health bar, ammo, scoreboard summary, hit
- * indicator, and the respawn countdown. The DOM is mounted into a
- * single `<div class="hud">` and updated by `update(state, localId)`.
- * All values come from the server snapshot; the HUD is read-only.
+ *
+ * Crosshair, health, ammo, score, hit feedback and the respawn
+ * countdown. Deliberately imperative: it is written from the server
+ * snapshot as fast as snapshots arrive, and routing that through a
+ * component tree would spend a diff per tick on nine text nodes.
+ *
+ * It is read-only. Every value comes from the snapshot, and nothing here
+ * decides anything about the match.
+ *
+ * Colour lives in `theme.css`, so the markup below carries `currentColor`
+ * and class names rather than literals: the crosshair's dark-on-light
+ * pairing is the foreground and background tokens, not black and white.
  */
 
-import type { PlayerWire, RoomSnapshot } from "../net/protocol";
+import type { PlayerWire, RoomSnapshot } from "@/net/protocol";
 
 const HIT_MARKER_MS = 350;
+const HIT_FLASH_MS = 500;
 
 export class Hud {
     private root: HTMLElement;
@@ -25,21 +34,22 @@ export class Hud {
     constructor(parent: HTMLElement) {
         this.root = document.createElement("div");
         this.root.className = "hud";
+        this.root.dataset.active = "false";
         this.root.innerHTML = `
             <svg class="hud-crosshair" viewBox="-9 -9 18 18">
-                <g stroke="black" stroke-width="3" stroke-linecap="round" fill="none">
+                <g class="hud-crosshair-shadow" stroke-width="3" stroke-linecap="round" fill="none">
                     <line x1="-7" y1="0" x2="-3" y2="0" />
                     <line x1="7" y1="0" x2="3" y2="0" />
                     <line x1="0" y1="-7" x2="0" y2="-3" />
                     <line x1="0" y1="7" x2="0" y2="3" />
                 </g>
-                <g stroke="white" stroke-width="1" stroke-linecap="round" fill="none">
+                <g class="hud-crosshair-line" stroke-width="1" stroke-linecap="round" fill="none">
                     <line x1="-7" y1="0" x2="-3" y2="0" />
                     <line x1="7" y1="0" x2="3" y2="0" />
                     <line x1="0" y1="-7" x2="0" y2="-3" />
                     <line x1="0" y1="7" x2="0" y2="3" />
                 </g>
-                <circle cx="0" cy="0" r="1.6" fill="black" />
+                <circle class="hud-crosshair-dot" cx="0" cy="0" r="1.6" />
             </svg>
             <div class="hud-health">
                 <div class="hud-number" data-health-number>100</div>
@@ -51,8 +61,8 @@ export class Hud {
                 <div class="hud-number" data-ammo>30 / 90</div>
             </div>
             <div class="hud-stats">
-                <div class="hud-secondary">KILLS · DEATHS</div>
-                <div class="hud-number" style="font-size: 24px" data-stats>0 · 0</div>
+                <div class="hud-secondary">KILLS &middot; DEATHS</div>
+                <div class="hud-number hud-number-small" data-stats>0 &middot; 0</div>
             </div>
             <svg class="hud-hitmarker" data-hitmarker data-visible="false" viewBox="-12 -12 24 24">
                 <g stroke-width="2.5" stroke-linecap="round" fill="none">
@@ -63,7 +73,7 @@ export class Hud {
                 </g>
             </svg>
             <div class="hud-respawn" data-respawn>RESPAWNING IN 3...</div>
-            <div class="hud-hit" data-hit style="position:absolute; inset:0; pointer-events: none;"></div>
+            <div class="hud-hit" data-hit></div>
         `;
         parent.appendChild(this.root);
         this.healthFill = this.root.querySelector("[data-health-fill]")!;
@@ -79,12 +89,18 @@ export class Hud {
         this.localId = id;
     }
 
+    /* The HUD stays mounted between matches so its elements are always
+     * measurable, but a crosshair floating over a menu is noise. */
+    setActive(active: boolean): void {
+        this.root.dataset.active = String(active);
+    }
+
     flashHit(direction: number = 0): void {
         this.hitAt = performance.now();
-        const a = (direction * 180) / Math.PI;
+        const degrees = (direction * 180) / Math.PI;
         this.hitIndicator.innerHTML = `
-            <svg viewBox="0 0 100 100" width="100%" height="100%" style="opacity:0.8">
-                <g transform="rotate(${a} 50 50)" fill="hsl(0 72% 51%)" stroke="black" stroke-width="1.5">
+            <svg class="hud-hit-arrow" viewBox="0 0 100 100" width="100%" height="100%">
+                <g transform="rotate(${degrees} 50 50)">
                     <polygon points="50,5 60,30 80,30 65,45 70,75 50,60 30,75 35,45 20,30 40,30" />
                 </g>
             </svg>
@@ -106,6 +122,7 @@ export class Hud {
         if (me) {
             this.healthNumber.textContent = String(me.hp);
             this.healthFill.style.width = `${(me.hp / me.max_hp) * 100}%`;
+            this.healthFill.dataset.low = String(me.hp <= me.max_hp * 0.3);
             this.ammoNumber.textContent = me.is_reloading
                 ? "RELOADING"
                 : `${me.ammo} / ${me.magazine_size}`;
@@ -117,7 +134,7 @@ export class Hud {
             }
         }
         const now = performance.now();
-        if (this.hitAt > 0 && now - this.hitAt > 500) {
+        if (this.hitAt > 0 && now - this.hitAt > HIT_FLASH_MS) {
             this.hitIndicator.innerHTML = "";
             this.hitAt = 0;
         }
