@@ -180,6 +180,16 @@ async function burstAndWatch(shooter: Page, victim: Page, ms: number): Promise<n
     return typeof floor === "number" ? floor : 100;
 }
 
+/** Metres between the shooter and the opponent it can see. */
+async function rangeToOpponent(page: Page): Promise<number> {
+    return page.evaluate(() => {
+        const me = window.__sfDebug.position();
+        const them = window.__sfDebug.remotes()[0];
+        if (!them) return Number.POSITIVE_INFINITY;
+        return Math.hypot(them.x - me.x, them.z - me.z);
+    });
+}
+
 /** One line describing where the shooter is, where it is pointing, and
  * whether its frame loop is running. Read on failure, not on success. */
 async function describeAim(page: Page, attempt: number): Promise<string> {
@@ -391,20 +401,29 @@ test.describe("a match", () => {
             // "It did not hit" is not a diagnosis, and this runs on
             // machines far slower than the one it was written on.
             const telemetry: string[] = [];
+            let sidestep: "a" | "d" = "d";
+
             for (let approach = 0; approach < 12 && lowest === 100; approach++) {
                 await aimAtOpponent(host);
                 telemetry.push(await describeAim(host, approach));
                 lowest = await burstAndWatch(host, guest, 1_500);
                 if (lowest < 100) break;
 
-                // Nothing landed, so cover is in the way or the range is
-                // long. Walk at them; if a wall stops that, sidestep to
-                // look for the way around, then aim again next time
-                // round. Between them those two moves get through an
-                // arena built out of walls and gaps, without the test
-                // needing to know where this arena put them.
-                const closed = await advance(host, "w", 3, 6_000);
-                if (!closed) await advance(host, "d", 3, 6_000);
+                /* Nothing landed, so cover is in the way. Close in, and
+                 * judge that by the RANGE to the opponent rather than by
+                 * ground covered: walking into a wall slides along it,
+                 * which covers plenty of ground while getting no nearer,
+                 * and a shooter that mistakes the two grinds into a
+                 * corner. When the range stops falling, sidestep to look
+                 * for the way around, alternating sides so a wall cannot
+                 * pin it against the same edge twice. */
+                const rangeBefore = await rangeToOpponent(host);
+                await advance(host, "w", 3, 5_000);
+                const rangeAfter = await rangeToOpponent(host);
+                if (!(rangeAfter < rangeBefore - 1)) {
+                    await advance(host, sidestep, 4, 5_000);
+                    sidestep = sidestep === "d" ? "a" : "d";
+                }
             }
 
             // The server raycast it, so the drop shows on the victim's
