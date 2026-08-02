@@ -1,29 +1,50 @@
-# Intent specification — shoot4fun
+# Intent specification, shoot4fun
 #
 # One claim per proposal Req ID. Each claim is the only maintained
 # correctness spec for the system; the proposal's requirement spine is
 # the traceability anchor (`derived_from`), and the test surface is what
 # the claim is attestable by (CSD-INTENT-01).
 #
-# All claims start as `status: draft`. The build promotes them to
-# `active` as it stands each one up; the audit (`csd-intent .`) enforces
-# attestation only on `active` claims, so a draft claim with no test
-# marker is fine at the plan gate and is the build's job to fill in.
-# Plan-time test stubs live at tests/intent/ and prove the claim-to-test
-# wiring is wired before the build swaps them for real tests.
+# `status` is the honest state of the claim:
+#
+#   active   the statement holds of the system, and a test marker names
+#            the claim.
+#   draft    the claim is not stood up. Either no marker names it, or
+#            the behaviour it describes is not wired end to end. Each
+#            draft claim carries a comment saying which, and what does
+#            stand today.
+#
+# The audit (`csd-intent .`) enforces attestation on `active` claims
+# only, so a draft claim is a declared gap rather than a hidden one.
+#
+# Where the attestation lives:
+#
+#   backend/tests/**                      pytest, `@pytest_intent.intent`
+#   apps/client/e2e/match.spec.ts         playwright, two browsers against
+#                                         a real server, `intent()`
+#   apps/client/e2e/foundry/**            playwright, opt-in: the suite
+#                                         skips it unless SHOOT4FUN_HOST
+#                                         points at a deployment
+#
+# `apps/client/src/sim/movement.test.ts` is the client half of the
+# shared-trace gate (`ADR-0004`). It replays `shared/movement_trace.json`
+# through the client's routine and carries no marker of its own; the
+# server half, `backend/tests/unit/domain/test_movement_trace.py`, is
+# what names `INT-003`.
 #
 # The proposal is the durable source for requirement IDs and the
-# descope list (§"What the verbatim ask does NOT cover"). Every Req ID
-# is mapped here; every descoped item is restated in .delivery/handoff.md
-# under "Descoped (recorded)". No silent drops.
+# descope list. Every Req ID is mapped here. No silent drops.
 
 version: 1.0.0
 spec: CSD-INTENT-01
 
+# Built in `apps/client/src/scene/SceneApp.ts`. Draft because no marker
+# names it: the e2e suite waits on `data-scene-ready` as the precondition
+# of every match test rather than asserting it for this claim.
 INT-001:
-  version: 1.0.0
-  status: active
-  statement: "The client renders a 3D scene with a WebGL canvas driven by Three.js, and that canvas presents a live frame within 2s of the lobby hand-off."
+  version: 1.1.0
+  status: draft
+  statement: "The client renders the match with Three.js: a WebGLRenderer drives a WebGL canvas mounted in `#app`, and the host element carries `data-scene-ready` from the first rendered frame onward."
   rationale: "Three.js IS the rendering stack; a build that drops Three.js (or renders to a 2D canvas) fails the `threejs` token of the verbatim ask."
   derived_from: REN-001
   test:
@@ -33,46 +54,46 @@ INT-001:
   criticality: critical
 
 INT-002:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "Pointer-lock active, mouse movement rotates the first-person camera around the player's local Y (yaw) and X (pitch, clamped to avoid gimbal flip)."
+  statement: "Mouse-look is gated on pointer lock: the camera turns only while the canvas holds the lock, taken from a click on the gate overlay and released by Escape. Under lock, relative mouse movement rotates the camera about Y (yaw) and X (pitch), and pitch is clamped just short of vertical so the view cannot flip."
   rationale: "Mouse-look is the FPS input contract; without it the scene is a third-person viewer, not a shooter."
   derived_from: CAM-001
   test:
     scope: e2e
-    component: FirstPersonCamera
+    component: PointerLockCamera
     type: behavior
   criticality: critical
 
 INT-003:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "Holding W, A, S, or D moves the local player on the arena's flat ground at a fixed speed, released keys stop motion within one tick."
+  statement: "Holding W, A, S or D walks the player across the arena's flat ground at 6 m/s in the direction their yaw defines; releasing every key stops motion on the next frame. The server integrates that motion from the input frame's buttons, yaw and dt, and the client predicts it with the same routine."
   rationale: "WASD-on-a-flat-plane is the literal definition of the `MOV-001` ask; anything else (jump, sprint, swim) is scope creep that has not been priced."
   derived_from: MOV-001
   test:
     scope: e2e
-    component: PlayerController
+    component: Movement
     type: behavior
   criticality: critical
 
 INT-004:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "A primary-mouse click while pointer-locked fires the equipped weapon (hitscan or projectile); a hit decrements the target's hit points by the weapon's damage, a miss is silent."
-  rationale: "SHO-001 is the single requirement that turns the app from a 'scene' into a 'shooter'; the fire contract must be end-to-end (input -> raycast/projectile -> HP delta) and not just a UI animation."
+  statement: "Fire rides inside the input frame as `buttons.fire`. The server resolves it by raycasting from the shooter's eye along the look angles they reported, against the world rewound to the tick they had drawn: cover blocks the ray, the nearest player hit takes the equipped weapon's damage (doubled above head height), and a miss changes nothing. No client message names a victim or an amount of damage."
+  rationale: "SHO-001 is the single requirement that turns the app from a 'scene' into a 'shooter'; the fire contract must be end-to-end (input -> raycast -> HP delta) and not just a UI animation."
   derived_from: SHO-001
   test:
     scope: e2e
-    component: WeaponSystem
+    component: Hitscan
     type: behavior
   criticality: critical
 
 INT-005:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "Every player has non-negative hit points; when HP reaches zero the player respawns at a spawn point after a 3s respawn overlay that begins at the moment of death (the overlay reads RESPAWNING IN 3... 2... 1... 0; respawn happens at 0), with hit points reset to full."
-  rationale: "Respawn is the loop that keeps a 6-8s match playable past one death; without it the match ends on the first kill."
+  statement: "Hit points never fall below zero. A player at zero hit points is dead for 3 seconds, with the HUD counting the remaining seconds down, and then respawns with full hit points on one of the arena's spawn points, chosen away from the living rather than where they fell."
+  rationale: "Respawn is the loop that keeps a match playable past one death; without it the match ends on the first kill."
   derived_from: HP-001
   test:
     scope: unit
@@ -80,10 +101,14 @@ INT-005:
     type: invariant
   criticality: high
 
+# Built in `backend/shoot4fun_backend/domain/model/arena.py` (the server's
+# collision volumes) and `SceneApp.rebuildArena` (the meshes). Draft
+# because no marker names it: the e2e suite asserts the cover count under
+# INT-007's collision test rather than for this claim.
 INT-006:
-  version: 1.0.0
-  status: active
-  statement: "The MVP arena is one bounded flat ground plane populated with simple cover objects (low walls, crates, barrels) per the design's arena section."
+  version: 1.1.0
+  status: draft
+  statement: "An arena is one bounded flat ground plane, walled on all four sides, populated with axis-aligned cover boxes in a mix of heights (waist-high that shapes a route, shoulder-high that leaves only a head showing, full-height that breaks the sightline) which the server carries as collision volumes and the client builds meshes from."
   rationale: "MAP-001 is the `simple` token's spatial answer; bounded = the player can run into a wall, cover = the cover mechanic is playable."
   derived_from: MAP-001
   test:
@@ -93,9 +118,9 @@ INT-006:
   criticality: high
 
 INT-007:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "Player-to-wall collision prevents the local player from leaving the arena bounds or passing through cover; player-to-player collision prevents two players from occupying the same point."
+  statement: "A player cannot leave the arena bounds or pass through cover: the shared movement routine clamps to the bounds and pushes the player out of every cover box, in the server's simulation and in the client's prediction alike. Two living players cannot occupy the same point; the server separates them at twice the player radius after it integrates the frame."
   rationale: "COL-001 is the line between 'a scene with avatars' and 'a game'; without it, players fall through the floor and clip through each other."
   derived_from: COL-001
   test:
@@ -105,9 +130,9 @@ INT-007:
   criticality: critical
 
 INT-008:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "A WebSocket match room accepts between 2 and 4 concurrent players; the server rejects a 5th connection with a documented `ROOM_FULL` error code, the room ID is the only routing key."
+  statement: "A WebSocket match room holds at most 4 concurrent players; the 5th connection is answered with the documented `ROOM_FULL` error code and closed with 4409. The room id in `/ws/match/{room_id}` is the only routing key, and a match starts only once two or more players are readied up."
   rationale: "`multiplayer` is the token whose bounds the scope fixed (2-4 players); a room that accepts 1 player is not multiplayer, a room that accepts 5 inflates the per-instance resource budget the proposal priced (PERF-001)."
   derived_from: NET-001
   test:
@@ -117,21 +142,21 @@ INT-008:
   criticality: critical
 
 INT-009:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "Position and rotation are server-authoritative: clients send input, the server ticks at a fixed rate of 20Hz, and the broadcast state is the server's truth; client-side position is the latest server snapshot."
+  statement: "The client sends intent and the server owns the world: an input frame carries buttons, look angles, dt and ack_tick and nothing else, so no wire shape exists for a position, a velocity, a displacement or a victim. The server integrates movement on a 60Hz simulation tick, bounding dt per frame and against real elapsed time, and broadcasts the world at 20Hz; every snapshot carries the last input sequence the server consumed, which is what the client reconciles its prediction against."
   rationale: "Server-authoritative is the only cheat-resistance strategy the proposal priced (ARCH-001); anything else is a regression to peer-to-peer trust."
   derived_from: SYNC-001
   test:
     scope: integration
-    component: AuthoritativeTick
+    component: AuthoritativeSimulation
     type: invariant
   criticality: critical
 
 INT-010:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "Each player has a per-match kill counter that increments on a confirmed kill; the match ends when the timer expires or all but one player is eliminated, and the player with the highest kill count wins."
+  statement: "Each player has a per-match kill counter that increments on a confirmed kill and leaves every other player's count alone; the match ends when the timer expires or fewer than two players are alive, and the highest kill count wins, ties breaking on the first counted kill."
   rationale: "SCO-001 is the scoring rule of a match; the unit-testable shape is the counter increment, the e2e shape is the win-condition."
   derived_from: SCO-001
   test:
@@ -141,9 +166,9 @@ INT-010:
   criticality: high
 
 INT-011:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "A match runs a lobby -> playing -> results state machine: the lobby is the only place a player can ready up, the playing state is the only state in which HP and the kill counter change, the results state is the only state in which the leaderboard renders."
+  statement: "A match runs a lobby -> playing -> results state machine and every other transition raises. Ready-up is accepted in the lobby only, hit points and the kill counter change in the playing state only, and the scoreboard renders on the results screen, from which the host's rematch returns the room to the lobby."
   rationale: "MAT-001 is the lifecycle that makes `multiplayer` a game and not a chat; the FSM is the part that is unit-testable, the surface is e2e."
   derived_from: MAT-001
   test:
@@ -152,23 +177,30 @@ INT-011:
     type: behavior
   criticality: critical
 
+# The probe runs only when SHOOT4FUN_HOST points the suite at a
+# deployment; the default run skips `e2e/foundry/`. The platform's
+# per-app conformance report is read from the platform studio, not by
+# this suite.
 INT-012:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "The frontend and backend are containerised, pushed to GHCR under PSA-Department-of-Engineering, and the PSA Foundry platform reconciles them to the public hostname `shoot4fun.chaos-architect.dev`; a cache-busted HTTPS GET of that hostname returns a 200 (or a 302/401 behind OIDC) within 5s, and the platform's per-app conformance report is green for the `shoot4fun` app."
-  rationale: "DEP-001 is the only way the engagement ships; the build's done-definition per REF-Delivery §5a includes a live evidence chain, not a `docker compose up` on the operator's laptop."
+  statement: "The client and the server ship as two containers, built and pushed to GHCR under PSA-Department-of-Engineering, and the PSA Foundry reconciles them to the public hostname `shoot4fun.chaos-architect.dev`; a cache-busted HTTPS GET of that hostname answers 200 (or 302/401 behind OIDC) within 5s."
+  rationale: "DEP-001 is the only way the engagement ships; the build's done-definition per REF-Delivery includes a live evidence chain, not a `docker compose up` on the operator's laptop."
   derived_from: DEP-001
   test:
-    scope: integration
+    scope: e2e
     component: FoundryDeployment
     type: contract
   criticality: critical
 
+# Built: the 1 and 2 keys queue a switch in `InputController`, the scene
+# forwards it, and `Player.equip` plus `Player.can_fire` enforce the
+# per-weapon constants. Draft because no marker names it.
 INT-013:
-  version: 1.0.0
-  status: active
-  statement: "At least two distinct weapons are selectable in-match (via the 1/2 keys); each weapon has its own rate of fire, magazine size, damage, and reload time, and the active weapon's stats drive the HUD's ammo display."
-  rationale: "WPN-002 is the P2 polish that makes the shooter's gameplay varied; the 'different feel' is gameplay-only, the HUD chrome is shared (per design §2.2)."
+  version: 1.1.0
+  status: draft
+  statement: "Two weapons are selectable in-match with the 1 and 2 keys; each carries its own rate of fire, magazine size, damage and reload time, the server enforces all four, and the HUD's ammo readout follows the active weapon."
+  rationale: "WPN-002 is the P2 polish that makes the shooter's gameplay varied; the 'different feel' is gameplay-only, the HUD chrome is shared."
   derived_from: WPN-002
   test:
     scope: e2e
@@ -177,9 +209,9 @@ INT-013:
   criticality: medium
 
 INT-014:
-  version: 1.0.0
+  version: 1.1.0
   status: active
-  statement: "The lobby exposes at least two arena maps that the host can pick before starting the match; the server loads the chosen map and the client receives its layout before the playing state begins."
+  statement: "The lobby offers the arenas `GET /api/arenas` lists, which is the same set the server accepts a `select_map` for, and the host picks one before the match starts; the server owns the choice, and the chosen arena's layout travels in every player's room snapshot, which every client rebuilds its scene from."
   rationale: "MAP2-002 is the P2 revisit of the `simple` token; the lobby selector is the player-facing surface, the server-side load is the integration contract."
   derived_from: MAP2-002
   test:
@@ -188,34 +220,50 @@ INT-014:
     type: behavior
   criticality: medium
 
+# Built: `AudioEngine` generates the shot, hit, footstep and sting
+# families at runtime and reads both volumes from `localStorage`, the
+# scene calls shot, hit, hurt and footstep, and the horn and the sting
+# ride the lobby -> playing -> results transitions. The engine starts on
+# the pointer-lock gesture, which is the user interaction a browser
+# requires before it will let an AudioContext make a sound. Draft
+# because no marker names it.
 INT-015:
-  version: 1.0.0
-  status: active
-  statement: "In-match audio cues fire for gunshot, hit, footstep, the lobby horn on match start, and the results sting on match end; sounds are generated at runtime via the Web Audio API (no audio files in the repo) and the master/SFX volumes read from `localStorage`."
+  version: 1.1.0
+  status: draft
+  statement: "In-match audio cues fire for the gunshot, the hit, the footstep, a horn on match start and a sting on match end; every sound is generated at runtime through the Web Audio API (no audio files in the repo) and the master and SFX volumes read from `localStorage`."
   rationale: "SND-002 is the P2 polish that gives the match a sense of presence; runtime generation keeps the repo asset-free (no licence-cleanup work)."
   derived_from: SND-002
   test:
-    scope: integration
+    scope: e2e
     component: WebAudioEngine
     type: behavior
   criticality: medium
 
+# Built in `SceneApp` (the arena's lighting, shadow map, no
+# postprocessing), `FirstPerson.ts` (the held weapon's own pass, lit by
+# its own pair so the gun reads against any wall behind it) and
+# `Particles.ts` (the pool). Draft because no marker names it.
 INT-016:
-  version: 1.0.0
-  status: active
-  statement: "Muzzle flash, hit particles, and a basic shadow map are present in the scene; lighting is one hemisphere + one directional per design §2.1, and the postprocessing chain is empty (no FXAA, no bloom) so the perf budget holds."
+  version: 1.1.0
+  status: draft
+  statement: "The arena is lit by one hemisphere light and one directional light casting a shadow map, and the first-person weapon renders in a pass of its own carrying the same pair. Muzzle-flash and impact particles spawn from a pre-allocated pool for every shot the room fires, hit or miss, read out of the snapshot's magazine counts rather than from a local fire button. The render path carries no postprocessing chain."
   rationale: "VFX-002 is the P2 polish that lifts the look from functional to readable; the empty postprocessing chain is a perf-bar commitment, not an oversight."
   derived_from: VFX-002
   test:
-    scope: integration
+    scope: e2e
     component: ParticleSystem
     type: behavior
   criticality: medium
 
+# Partially wired. The upsert-if-higher contract is attested against the
+# in-memory adapter; the Postgres adapter is selected when DATABASE_URL
+# is set and its test runs only with TEST_DATABASE_URL; the results
+# screen reads `GET /api/leaderboard/{arena}`. Nothing posts a score at
+# match end, so the store stays empty and no score outlives the process.
 INT-017:
-  version: 1.0.0
-  status: active
-  statement: "A persistent best-score leaderboard per arena survives match end and process restart; the leaderboard is backed by the PSA platform's per-app database (a `pg-app-shoot4fun` role on the platform's PostgreSQL), and only the highest per-arena score is retained."
+  version: 1.1.0
+  status: draft
+  statement: "A best-score leaderboard per arena survives match end and process restart, held in the PSA platform's per-app PostgreSQL database (a `pg-app-shoot4fun` role), keeping only the highest score for each arena."
   rationale: "LDR-002 is the P2 capability that needs a priced platform grant (DEP-002); a 'best score' in `localStorage` is not the requirement, the durable store is."
   derived_from: LDR-002
   test:

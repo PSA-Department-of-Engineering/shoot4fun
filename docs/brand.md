@@ -1,4 +1,4 @@
-# Shoot4Fun — Brand
+# Shoot4Fun: Brand
 
 > The locked visual identity per `.delivery/design.md` §1.1. The full
 > 19-key shadcn set + the 3D-scene colour bindings. Every UI element
@@ -26,8 +26,8 @@
 | `--border` | `30 12% 80%` | `#D2CCC6` | brand palette `--border` |
 | `--input` | `30 12% 80%` | `#D2CCC6` | same as `--border` |
 | `--ring` | `12 95% 55%` | `#F94B1F` | brand palette `--ring` |
-| `--radius` | `0.5rem` (8px) | — | brand palette `--radius` |
-| `--font-sans` | `Inter, system-ui, sans-serif` | — | the body / HUD fallback chain |
+| `--radius` | `0.5rem` (8px) | n/a | brand palette `--radius` |
+| `--font-sans` | `Inter, system-ui, sans-serif` | n/a | the body / HUD fallback chain |
 
 ## 3D-scene colour bindings
 
@@ -58,10 +58,13 @@ at runtime; the four WOFF2 files live in `apps/client/public/fonts/`.
 | Body | Inter | 400–600 | 14–16 px |
 | Mono (codes) | JetBrains Mono | 500 | 18–24 px |
 
-The **Wordmark** role applies to two surfaces in the build: the
-"SHOOT4FUN" splash lockup (`apps/client/src/main.ts`) and the "MATCH
-OVER" results banner (`apps/client/src/ui/Surface.ts`). There is no
-standalone kill-count-header surface — per-match kill counts render in
+The **Wordmark** role is one component,
+`apps/client/src/ui/views/atoms/Wordmark.tsx`, and applies to the three
+surfaces that announce the game itself: the entry splash
+(`views/pages/EntryPage.tsx`), the pointer-lock gate
+(`views/organisms/PointerLockGate.tsx`) and the "MATCH OVER" results
+banner (`views/pages/ResultsPage.tsx`). There is no
+standalone kill-count-header surface: per-match kill counts render in
 the HUD at the **HUD display** scale, not the Wordmark role.
 
 ## Logo
@@ -78,10 +81,10 @@ font isn't resolvable at build time. Output files:
 - `apps/client/public/apple-touch-icon.png` (180×180, from monogram)
 - `apps/client/public/icon-192.png` (PWA, from monogram)
 - `apps/client/public/icon-512.png` (PWA splash, from monogram)
-- `docs/logo.png` (600×160, from wordmark — README header)
+- `docs/logo.png` (600×160, from wordmark, the README header)
 
 The browser-tab favicon is `apps/client/public/favicon.svg` (the
-monogram SVG, linked directly by `index.html` — no rasterisation
+monogram SVG, linked directly by `index.html`, no rasterisation
 step), not a rasterised `.ico`. The supported browser matrix is
 modern evergreen only (Chrome, Edge, Firefox, Safari current), which
 reads SVG favicons natively; `resvg-js` also has no built-in `.ico`
