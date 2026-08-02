@@ -1,0 +1,28 @@
+{
+    "version": "0.0.1",
+    "configurations": [
+        {
+            "name": "backend",
+            "runtimeExecutable": "python",
+            "runtimeArgs": [
+                "-m",
+                "uvicorn",
+                "shoot4fun_backend.adapters.inbound.http.app:create_app",
+                "--factory",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000"
+            ],
+            "cwd": "backend",
+            "port": 8000
+        },
+        {
+            "name": "client",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": ["run", "dev"],
+            "cwd": "apps/client",
+            "port": 4173
+        }
+    ]
+}
