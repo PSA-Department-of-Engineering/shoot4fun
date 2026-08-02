@@ -26,14 +26,3 @@ intent('INT-012', 'https_probe_of_public_hostname_returns_2xx', async ({ request
     const date = res.headers()['date'];
     expect(lastModified ?? date).toBeDefined();
 });
-
-intent('INT-012', 'platform_conformance_report_is_green', async () => {
-    /* The per-app `platform-studio app_status` link is the standing
-     * check; the test runner here is a Playwright spec, so the
-     * conformance is read out-of-band (the build run polls the
-     * MCP). The unit of work, the cache-busted probe and the
-     * CI-green + GHCR-published + promotion write-back, is captured
-     * in `.delivery/build.md`; this marker attests the test surface
-     * exists. */
-    expect(true).toBe(true);
-});

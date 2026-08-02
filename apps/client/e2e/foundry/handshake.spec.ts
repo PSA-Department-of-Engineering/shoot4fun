@@ -9,8 +9,8 @@
  * a WebSocket and sends `set_ready` itself passes even when the game is
  * unplayable, because the server answers `set_ready` perfectly well: the
  * bug this guards against is that the client is never told which room it
- * joined, so `main.ts`'s `scene.onState` never fires, `surface.show("lobby")`
- * never runs, and no Ready button ever exists for a human to click. The
+ * joined, so no room snapshot reaches the runtime, the lobby screen never
+ * renders, and no Ready button ever exists for a human to click. The
  * player sees an empty sky and a default HUD forever. Asserting on the
  * Ready button is what makes that visible; asserting on the socket hides it.
  *
@@ -25,9 +25,9 @@ const HOST =
     process.env.BASE_URL ??
     'https://shoot4fun.chaos-architect.dev';
 
-/* One player: a fresh context with the name pre-seeded (main.ts otherwise
- * blocks on window.prompt), landed on the shared room, past the click-to-play
- * overlay that covers the surface. */
+/* One player: a fresh context with the name pre-seeded, so the entry screen
+ * joins the room in the hash rather than waiting to be filled in, landed on
+ * the shared room, past the click-to-play gate that covers the lobby. */
 async function openPlayer(browser: Browser, room: string, name: string): Promise<Page> {
     const context = await browser.newContext();
     await context.addInitScript(
@@ -36,8 +36,8 @@ async function openPlayer(browser: Browser, room: string, name: string): Promise
     );
     const page = await context.newPage();
     await page.goto(`${HOST}/#/${room}`);
-    /* The click-to-play overlay is appended once the socket opens, and it
-     * covers the surface, so it has to go before any lobby control is
+    /* The click-to-play gate stands over the room once the socket opens,
+     * and it covers the lobby, so it has to go before any lobby control is
      * clickable. It may never appear (offline fallback), hence the catch. */
     const overlay = page.getByText('Click to play');
     await overlay.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
@@ -73,14 +73,15 @@ intent('INT-011', 'two_players_can_ready_up_and_start_a_match_in_the_browser', a
     await guest.locator('[data-ready]').click();
 
     /* Start match is host-only and gated on every player being ready
-     * (Surface.ts), and a room needs 2+ players to be a match (INT-008). */
+     * (views/organisms/LobbyControls.tsx), and a room needs 2+ players to
+     * be a match (INT-008). */
     const start = host.locator('[data-start]');
     await expect(start, 'Start match never became enabled for the host').toBeEnabled({
         timeout: 20_000,
     });
     await start.click();
 
-    /* Leaving LOBBY hides the surface (main.ts), which is only reachable if the
+    /* Leaving LOBBY closes the lobby screen, which is only reachable if the
      * server accepted start_match and the tick loop is broadcasting state. */
     await expect(
         host.locator('[data-ready]'),

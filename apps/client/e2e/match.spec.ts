@@ -10,7 +10,7 @@
  * appeared in an array the production code hardcoded for it. That suite
  * was green while none of this worked.
  */
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 import { intent } from "./intent-shim";
 
@@ -22,8 +22,16 @@ interface DebugSurface {
     remoteCount(): number;
     remotes(): { id: string; x: number; y: number; z: number; visible: boolean }[];
     coverCount(): number;
+    sceneArenaId(): string;
+    bounds(): { min: Vec3; max: Vec3 } | null;
     state(): string | null;
     localId(): string;
+}
+
+interface Vec3 {
+    x: number;
+    y: number;
+    z: number;
 }
 
 declare global {
@@ -34,8 +42,21 @@ declare global {
 
 const MOVE_SPEED = 6.0;
 
+/* Every context opened by a test, closed after it.
+ *
+ * A browser left open keeps rendering WebGL, and the suite runs one
+ * worker: a leaked page is frame time taken from every test after it,
+ * on the machine least able to spare it. Closing here rather than at
+ * the end of each test means no test can forget. */
+const opened: BrowserContext[] = [];
+
+test.afterEach(async () => {
+    await Promise.all(opened.splice(0).map((context) => context.close()));
+});
+
 async function joinRoom(browser: Browser, room: string, name: string): Promise<Page> {
     const context = await browser.newContext();
+    opened.push(context);
     await context.addInitScript(
         ([playerName]) => window.localStorage.setItem("sf_player_name", playerName),
         [name],
@@ -46,8 +67,8 @@ async function joinRoom(browser: Browser, room: string, name: string): Promise<P
     return page;
 }
 
-/** Two players in one room, readied up, with the match running. */
-async function startedMatch(
+/** Two players in one room, in the lobby, before anyone is ready. */
+async function lobby(
     browser: Browser,
     room: string,
 ): Promise<{ host: Page; guest: Page }> {
@@ -56,6 +77,16 @@ async function startedMatch(
 
     await expect(host.locator("[data-ready]")).toBeVisible();
     await expect(guest.locator("[data-ready]")).toBeVisible();
+    return { host, guest };
+}
+
+/** Two players in one room, readied up, with the match running. */
+async function startedMatch(
+    browser: Browser,
+    room: string,
+): Promise<{ host: Page; guest: Page }> {
+    const { host, guest } = await lobby(browser, room);
+
     await host.locator("[data-ready]").click();
     await guest.locator("[data-ready]").click();
 
@@ -106,7 +137,6 @@ test.describe("a match", () => {
 
             const after = await host.evaluate(() => window.__sfDebug.camera());
             expect(Math.abs(after.pitch)).toBeLessThanOrEqual(Math.PI / 2);
-            await host.context().close();
         },
     );
 
@@ -145,7 +175,6 @@ test.describe("a match", () => {
                     afterRelease.z - afterWalk.z,
                 ),
             ).toBeLessThan(0.35);
-            await host.context().close();
         },
     );
 
@@ -162,15 +191,23 @@ test.describe("a match", () => {
                 await host.evaluate(() => window.__sfDebug.coverCount()),
             ).toBeGreaterThan(0);
 
+            // The arena the server actually sent, so redrawing the map
+            // does not silently turn this into an assertion about
+            // nothing. Only the bounds are read: where the walls are is
+            // the server's to say, staying inside them is the claim.
+            const bounds = await host.evaluate(() => window.__sfDebug.bounds());
+            expect(bounds).not.toBeNull();
+
             // Long enough to cross the arena several times over.
             await host.keyboard.down("w");
             await host.waitForTimeout(6000);
             await host.keyboard.up("w");
 
             const position = await host.evaluate(() => window.__sfDebug.position());
-            expect(Math.abs(position.x)).toBeLessThanOrEqual(30);
-            expect(Math.abs(position.z)).toBeLessThanOrEqual(30);
-            await host.context().close();
+            expect(position.x).toBeGreaterThanOrEqual(bounds!.min.x);
+            expect(position.x).toBeLessThanOrEqual(bounds!.max.x);
+            expect(position.z).toBeGreaterThanOrEqual(bounds!.min.z);
+            expect(position.z).toBeLessThanOrEqual(bounds!.max.z);
         },
     );
 
@@ -241,22 +278,35 @@ test.describe("a match", () => {
             });
             await host.waitForTimeout(200);
 
-            // Hold the trigger: the server rate-limits, so this is a
-            // burst rather than one shot, and it survives a near miss.
+            /* Hold the trigger and watch the victim's own screen while
+             * it is held. The server rate-limits, so this is a burst
+             * rather than one shot, and it survives a near miss.
+             *
+             * The reading has to be taken during the burst, not after
+             * it: this is a 1v1, the first kill leaves one man standing
+             * and ends the match, and the victim comes back on full
+             * health. Sampling once the trigger is released races that.
+             *
+             * The assertion is on the lowest reading seen, so a sample
+             * that lands after a respawn cannot un-see the hit. */
+            let lowest = 100;
             await host.mouse.down();
-            await host.waitForTimeout(2000);
-            await host.mouse.up();
-
-            // The server raycasts and applies the damage, so the drop
-            // shows on the victim's own screen, not just the shooter's.
-            await expect
-                .poll(async () => Number(await guestHp.textContent()), {
-                    timeout: 20_000,
-                })
-                .toBeLessThan(100);
-
-            await host.context().close();
-            await guest.context().close();
+            try {
+                await expect
+                    .poll(
+                        async () => {
+                            const shown = Number(await guestHp.textContent());
+                            if (Number.isFinite(shown)) {
+                                lowest = Math.min(lowest, shown);
+                            }
+                            return lowest;
+                        },
+                        { timeout: 20_000 },
+                    )
+                    .toBeLessThan(100);
+            } finally {
+                await host.mouse.up();
+            }
         },
     );
 
@@ -282,7 +332,58 @@ test.describe("a match", () => {
                 window.__sfDebug.correction(),
             );
             expect(correction).toBeLessThan(0.5);
-            await host.context().close();
+        },
+    );
+
+    intent(
+        "INT-014",
+        "the_host_picks_the_arena_and_every_screen_in_the_room_rebuilds_on_it",
+        async ({ browser, request }) => {
+            test.setTimeout(120_000);
+            const room = `E2E${Date.now().toString(36).slice(-5).toUpperCase()}`;
+            const { host, guest } = await lobby(browser, room);
+
+            /* The picker offers what the server offers. Reading the
+             * catalogue from the API rather than naming the arenas here
+             * is the point: a client list of maps is a list that can
+             * disagree with the server about which maps exist. */
+            const catalogue = (await (await request.get("/api/arenas")).json()) as {
+                id: string;
+                name: string;
+            }[];
+            expect(catalogue.length).toBeGreaterThan(1);
+            for (const arena of catalogue) {
+                const option = host.locator(`[data-arena="${arena.id}"]`);
+                await expect(option).toBeVisible();
+                await expect(option).toContainText(arena.name);
+            }
+
+            const current = await host
+                .locator('[data-arena][data-selected="true"]')
+                .getAttribute("data-arena");
+            const wanted = catalogue.find((arena) => arena.id !== current)!.id;
+
+            await host.locator(`[data-arena="${wanted}"]`).click();
+
+            /* The choice is the server's to make, so the proof it landed
+             * is the other player's screen changing: the guest is told
+             * nothing by the click itself. */
+            await expect(
+                guest.locator(`[data-arena="${wanted}"]`),
+            ).toHaveAttribute("data-selected", "true");
+
+            /* The layout travels with the choice, so both scenes are
+             * rebuilt on it rather than relabelled. This reads the arena
+             * the meshes were built from, not the one the snapshot
+             * named. */
+            for (const page of [host, guest]) {
+                await expect
+                    .poll(() => page.evaluate(() => window.__sfDebug.sceneArenaId()))
+                    .toBe(wanted);
+                expect(
+                    await page.evaluate(() => window.__sfDebug.coverCount()),
+                ).toBeGreaterThan(0);
+            }
         },
     );
 });

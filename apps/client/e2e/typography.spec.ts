@@ -36,22 +36,16 @@ test('all four locked fonts are self-hosted via @font-face', async ({ page }) =>
 
 test('the Wordmark role renders at the locked family and weight', async ({ page }) => {
     await page.goto('/');
-    // Same shape as the real markup (main.ts's click-to-play overlay,
-    // Surface.ts's results banner): an h1.wordmark inside .card.
-    const style = await page.evaluate(() => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.innerHTML = '<h1 class="wordmark">SHOOT4FUN</h1>';
-        document.body.appendChild(card);
-        const h1 = card.querySelector('h1.wordmark') as HTMLElement;
-        const computed = getComputedStyle(h1);
-        const result = {
+    // The entry screen's own banner (views/pages/EntryPage.tsx), read
+    // where the player sees it. A wordmark the test builds itself would
+    // pass over an app that had stopped rendering one.
+    const style = await page.locator('h1.wordmark').first().evaluate((el) => {
+        const computed = getComputedStyle(el);
+        return {
             fontFamily: computed.fontFamily,
             fontWeight: computed.fontWeight,
             fontSize: parseFloat(computed.fontSize),
         };
-        card.remove();
-        return result;
     });
 
     expect(style.fontFamily).toContain('Russo One');
@@ -63,7 +57,7 @@ test('the Wordmark role renders at the locked family and weight', async ({ page 
 
 test('the HUD display numbers render in the locked Bungee face at the locked size', async ({ page }) => {
     await page.goto('/');
-    // The HUD mounts unconditionally (src/ui/Hud.ts), so its real
+    // The HUD mounts unconditionally (src/ui/hud/Hud.ts), so its real
     // .hud-number elements are in the DOM without a live match.
     for (const selector of ['[data-ammo]', '[data-health-number]']) {
         const style = await page.locator(selector).evaluate((el) => {
@@ -78,8 +72,11 @@ test('the HUD display numbers render in the locked Bungee face at the locked siz
     }
 });
 
-test('room code and keybind-hint text render in the locked JetBrains Mono face', async ({ page }) => {
+test('the mono role resolves to the locked JetBrains Mono face', async ({ page }) => {
     await page.goto('/');
+    // --font-mono is what the room code and the keybind hint are set in,
+    // and both of those live behind a joined room. The token is the part
+    // that can be read from the entry screen.
     const fontFamily = await page.evaluate(() => {
         const probe = document.createElement('span');
         probe.style.fontFamily = 'var(--font-mono)';
