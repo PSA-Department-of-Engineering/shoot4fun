@@ -16,6 +16,9 @@ from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from starlette.websockets import WebSocketDisconnect
+from uvicorn.protocols.utils import ClientDisconnected
+
 from shoot4fun_backend.application.ports.outbound.broadcaster import Broadcaster
 from shoot4fun_backend.logging import get_logger
 
@@ -24,6 +27,13 @@ __all__ = ["WebSocketBroadcaster"]
 
 SendFn = Callable[[dict], Awaitable[None]]
 _log = get_logger("broadcaster")
+
+#: A player closing the tab is the ordinary end of a session, not a
+#: fault. It surfaces here as a failed send because the broadcast for
+#: the tick they left on is already in flight. Logged as a traceback it
+#: is several screens of noise per disconnect, which is how a real
+#: broadcast failure goes unread.
+_DISCONNECTED = (ClientDisconnected, WebSocketDisconnect, ConnectionError)
 
 
 class WebSocketBroadcaster(Broadcaster):
@@ -67,6 +77,9 @@ class WebSocketBroadcaster(Broadcaster):
             return
         try:
             await send(message)
+        except _DISCONNECTED:
+            _log.info("send_to %s: player gone", player_id)
+            self.unbind(player_id)
         except Exception:
             _log.exception("send_to %s failed", player_id)
             self.unbind(player_id)
