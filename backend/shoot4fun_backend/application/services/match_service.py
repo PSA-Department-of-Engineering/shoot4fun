@@ -135,14 +135,11 @@ class MatchService(MatchServicePort):
             room.apply_input(player_id, frame)
             if frame.fire:
                 outcome = room.fire(player_id, frame)
-            ended = self._settle_if_over(room)
-            end_snapshot = room.snapshot() if ended else None
+        # Nothing in an input frame can end a match: a kill sends the
+        # victim to a respawn timer, and the two conditions that do end
+        # one (the clock, and the room emptying) are the tick's to spot.
         if outcome is not None:
             await self._announce(room_id, outcome)
-        if end_snapshot is not None:
-            await self.broadcaster.send_to_room(
-                room_id, {"type": "results", "room": end_snapshot}
-            )
 
     async def _announce(self, room_id: str, outcome: FireOutcome) -> None:
         """Tell the room what a shot did.
@@ -292,13 +289,18 @@ class MatchService(MatchServicePort):
             )
 
     def _settle_if_over(self, room: MatchRoom) -> bool:
-        """End a playing match that has run out of opponents."""
+        """End a playing match that no longer holds two players.
+
+        Being dead is not being out. A player at zero hit points has a
+        respawn timer running and is coming back on a spawn point
+        (`INT-005`), so the question this asks is who remains in the
+        room, not who happens to be standing this instant. The match
+        ends when someone leaves, and on the clock (`MatchRoom.advance`);
+        a kill ends a round of the fight, never the match (`ADR-0005`).
+        """
         if room.state is not MatchState.PLAYING:
             return False
-        if len(room.players) < 2:
-            return False
-        alive = [p for p in room.players.values() if p.health.is_alive]
-        if len(alive) > 1:
+        if len(room.players) >= 2:
             return False
         room.end()
         return True

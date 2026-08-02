@@ -154,10 +154,10 @@ INT-009:
   criticality: critical
 
 INT-010:
-  version: 1.1.0
+  version: 1.2.0
   status: active
-  statement: "Each player has a per-match kill counter that increments on a confirmed kill and leaves every other player's count alone; the match ends when the timer expires or fewer than two players are alive, and the highest kill count wins, ties breaking on the first counted kill."
-  rationale: "SCO-001 is the scoring rule of a match; the unit-testable shape is the counter increment, the e2e shape is the win-condition."
+  statement: "Each player has a per-match kill counter that increments on a confirmed kill and leaves every other player's count alone; a kill ends a round of the fight and never the match, which ends when the timer expires or fewer than two players remain in the room, and the highest kill count wins, ties breaking on the first counted kill."
+  rationale: "SCO-001 is the scoring rule of a match; the unit-testable shape is the counter increment, the e2e shape is the win-condition. Death is a transition, not an exit: a player at zero hit points holds a running respawn timer (INT-005), so the population that decides whether a match continues is who is in the room rather than who is standing this instant. ADR-0005 records why."
   derived_from: SCO-001
   test:
     scope: unit
