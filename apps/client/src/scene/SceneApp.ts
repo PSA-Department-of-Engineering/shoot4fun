@@ -579,6 +579,8 @@ export function createSceneApp(): SceneApp {
              * read on the victim's own client. */
             health: () => room?.players.find((p) => p.id === localPlayerId)?.hp ?? null,
             framesRendered: () => framesRendered,
+            ammo: () =>
+                room?.players.find((p) => p.id === localPlayerId)?.ammo ?? null,
             minHealth: () =>
                 Number.isFinite(minHealthSeen) ? minHealthSeen : null,
             characterLoaded: () => characters.loaded,

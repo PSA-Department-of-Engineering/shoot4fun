@@ -29,6 +29,7 @@ interface DebugSurface {
     health(): number | null;
     minHealth(): number | null;
     framesRendered(): number;
+    ammo(): number | null;
 }
 
 interface Vec3 {
@@ -173,6 +174,35 @@ async function burstAndWatch(shooter: Page, victim: Page, ms: number): Promise<n
     }
     const floor = await victim.evaluate(() => window.__sfDebug.minHealth());
     return typeof floor === "number" ? floor : 100;
+}
+
+/** One line describing where the shooter is, where it is pointing, and
+ * whether its frame loop is running. Read on failure, not on success. */
+async function describeAim(page: Page, attempt: number): Promise<string> {
+    const state = await page.evaluate(() => {
+        const me = window.__sfDebug.position();
+        const them = window.__sfDebug.remotes()[0] ?? null;
+        return {
+            me: { x: me.x, z: me.z },
+            them: them ? { x: them.x, z: them.z } : null,
+            yaw: window.__sfDebug.camera().yaw,
+            wanted: them ? Math.atan2(-(them.x - me.x), -(them.z - me.z)) : null,
+            locked: window.__sfDebug.locked(),
+            frames: window.__sfDebug.framesRendered(),
+            ammo: window.__sfDebug.ammo(),
+        };
+    });
+    const range = state.them
+        ? Math.hypot(state.them.x - state.me.x, state.them.z - state.me.z)
+        : NaN;
+    const offBy =
+        state.wanted === null ? NaN : Math.abs(state.wanted - state.yaw);
+    return (
+        `  #${attempt} at (${state.me.x.toFixed(1)}, ${state.me.z.toFixed(1)})` +
+        ` target ${state.them ? `(${state.them.x.toFixed(1)}, ${state.them.z.toFixed(1)})` : "unknown"}` +
+        ` range ${range.toFixed(1)}m aim-off-by ${offBy.toFixed(3)}rad` +
+        ` locked=${state.locked} frames=${state.frames} ammo=${state.ammo}`
+    );
 }
 
 /* Hold `key` until `metres` have been covered, or give up.
@@ -346,8 +376,13 @@ test.describe("a match", () => {
                 .toBeGreaterThan(0);
 
             let lowest = 100;
+            // Kept so a failure can say what the shooter was doing.
+            // "It did not hit" is not a diagnosis, and this runs on
+            // machines far slower than the one it was written on.
+            const telemetry: string[] = [];
             for (let approach = 0; approach < 12 && lowest === 100; approach++) {
                 await aimAtOpponent(host);
+                telemetry.push(await describeAim(host, approach));
                 lowest = await burstAndWatch(host, guest, 1_500);
                 if (lowest < 100) break;
 
@@ -362,8 +397,10 @@ test.describe("a match", () => {
             }
 
             // The server raycast it, so the drop shows on the victim's
-            // own screen and not merely on the shooter's.
-            expect(lowest).toBeLessThan(100);
+            // own client and not merely on the shooter's.
+            expect(lowest, `no shot landed:
+${telemetry.join("
+")}`).toBeLessThan(100);
         },
     );
 
