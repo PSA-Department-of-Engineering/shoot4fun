@@ -22,8 +22,6 @@ export class AudioEngine {
     private ctx: AudioContext | null = null;
     private masterGain: GainNode | null = null;
     private sfxGain: GainNode | null = null;
-    private analyser: AnalyserNode | null = null;
-    private analyserData: Uint8Array<ArrayBuffer> = new Uint8Array(new ArrayBuffer(256));
     private started = false;
 
     ensure(): void {
@@ -39,10 +37,12 @@ export class AudioEngine {
         this.masterGain.gain.value = readVolume(STORAGE_MASTER, 0.7);
         this.sfxGain = this.ctx.createGain();
         this.sfxGain.gain.value = readVolume(STORAGE_SFX, 0.8);
-        this.analyser = this.ctx.createAnalyser();
-        this.analyser.fftSize = 512;
-        this.masterGain.connect(this.analyser);
-        this.analyser.connect(this.ctx.destination);
+        // Every cue is an effect, so the effects bus feeds the master bus
+        // and the master bus is the only thing that reaches the speakers.
+        // A sub-bus left unconnected is a game that renders sound nobody
+        // hears.
+        this.sfxGain.connect(this.masterGain);
+        this.masterGain.connect(this.ctx.destination);
         window.addEventListener("storage", (e) => {
             if (e.key === STORAGE_MASTER) {
                 this.masterGain!.gain.value = readVolume(STORAGE_MASTER, 0.7);
@@ -59,46 +59,14 @@ export class AudioEngine {
         }
     }
 
-    /** Returns true if the audio graph is producing output above the
-     * analyser noise floor. Used by INT-015 to verify the cue fired. */
-    peakOver(floor: number = 8): boolean {
-        if (!this.analyser) return false;
-        this.analyser.getByteTimeDomainData(this.analyserData);
-        let max = 0;
-        for (const v of this.analyserData) {
-            const d = Math.abs(v - 128);
-            if (d > max) max = d;
-        }
-        return max > floor;
-    }
-
-    /** Expose the audio engine on `window` for e2e tests (INT-015). */
-    exposeTestHooks(): void {
-        (window as unknown as { __sfAudioShot: () => void }).__sfAudioShot = () => {
-            this.setStarted(true);
-            this.shot();
-            (window as unknown as { __sfAudioShotCount: number }).__sfAudioShotCount =
-                ((window as unknown as { __sfAudioShotCount?: number })
-                    .__sfAudioShotCount ?? 0) + 1;
-        };
-        (window as unknown as { __sfAudioResume: () => void }).__sfAudioResume = () => {
-            this.ensure();
-            this.resume();
-        };
-        (window as unknown as { __sfAudioPeakOver: (f: number) => boolean }).__sfAudioPeakOver =
-            (f: number) => this.peakOver(f);
-        (window as unknown as { __sfGetVolumes: () => { master: number; sfx: number } }).__sfGetVolumes =
-            () => {
-                const master = Number(window.localStorage.getItem("sf_master_volume") ?? 0.7);
-                const sfx = Number(window.localStorage.getItem("sf_sfx_volume") ?? 0.8);
-                return { master, sfx };
-            };
-    }
-
-    shot(): void {
+    /** A gunshot. `level` carries distance: a rifle across the arena is
+     * the same sound quieter and duller, so the ear places it. */
+    shot(level: number = 1): void {
         if (!this.started) return;
         this.ensure();
         if (!this.ctx || !this.sfxGain) return;
+        const loudness = Math.max(0, Math.min(1, level));
+        if (loudness <= 0.02) return;
         const t = this.ctx.currentTime;
         const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.2, this.ctx.sampleRate);
         const data = buf.getChannelData(0);
@@ -109,14 +77,34 @@ export class AudioEngine {
         src.buffer = buf;
         const filt = this.ctx.createBiquadFilter();
         filt.type = "lowpass";
-        filt.frequency.value = 1200;
+        // Air eats the top end first, so a distant shot is a thump.
+        filt.frequency.value = 400 + 800 * loudness;
         const g = this.ctx.createGain();
         g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(1, t + 0.005);
+        g.gain.linearRampToValueAtTime(loudness, t + 0.005);
         g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
         src.connect(filt).connect(g).connect(this.sfxGain);
         src.start(t);
         src.stop(t + 0.2);
+    }
+
+    /** Taking a hit: a low thud under the hit indicator. */
+    hurt(): void {
+        if (!this.started) return;
+        this.ensure();
+        if (!this.ctx || !this.sfxGain) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(180, t);
+        osc.frequency.exponentialRampToValueAtTime(55, t + 0.25);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.5, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        osc.connect(g).connect(this.sfxGain);
+        osc.start(t);
+        osc.stop(t + 0.3);
     }
 
     hit(): void {

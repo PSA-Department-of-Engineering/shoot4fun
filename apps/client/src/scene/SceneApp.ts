@@ -1,7 +1,7 @@
 /* The Shoot4Fun scene.
  *
  * A framework-agnostic module behind one boundary: it owns the renderer,
- * the camera rig, the arena, the player meshes and the frame loop, and
+ * the camera rig, the arena, the player avatars and the frame loop, and
  * it exposes state to the host page through callbacks rather than
  * sharing Three.js objects outward.
  *
@@ -9,15 +9,25 @@
  * inside it is deliberate:
  *
  *  1. Read the input state and apply look to the camera immediately.
- *     Aim never waits for the network (ADR-0002).
+ *     Aim never waits for the network (ADR-0002). Recoil and shake are
+ *     added on top as offsets, so they move the view without ever
+ *     overwriting where the player pointed it.
  *  2. Predict the local player's motion with the same routine the
  *     server runs, and send that exact frame as intent (ADR-0004).
  *  3. Place every other player from the interpolation buffer, which
- *     renders them slightly in the past so 20Hz reads as smooth.
- *  4. Advance effects and draw.
+ *     renders them slightly in the past so 20Hz reads as smooth, and
+ *     let each avatar derive its own animation from how far it moved.
+ *  4. Advance effects and draw, the arena first and the holder's own
+ *     weapon second, over a depth buffer of its own.
+ *
+ * Shots are not read from a fire button. The server spends a round on
+ * every shot it allows and every snapshot carries every player's
+ * magazine, so `ShotStream` reads the room's gunfire out of the world
+ * itself: one authority, every player, hits and misses alike.
  *
  * The local player's own avatar is never drawn: the camera is inside it
- * (ADR-0002).
+ * (ADR-0002). What the holder sees instead is the weapon they carry,
+ * which lives in `FirstPerson`.
  */
 
 import * as THREE from "three";
@@ -30,12 +40,30 @@ import type { ArenaWire, PlayerWire, RoomSnapshot } from "../net/protocol";
 import { Predictor } from "../sim/Predictor";
 import { SnapshotBuffer } from "../sim/SnapshotBuffer";
 import { clampPitch, type ArenaLike } from "../sim/movement";
-import { ParticleSystem } from "./Particles";
+import { Avatar } from "./Avatar";
+import { CharacterLibrary } from "./CharacterLibrary";
+import { disposeChildren, disposeObject } from "./dispose";
+import { Effects } from "./Effects";
+import { FirstPerson } from "./FirstPerson";
+import { SHOT_LAYER, ShotRay } from "./ShotRay";
+import { ShotStream, type Shot } from "./ShotStream";
+import { createGroundTexture } from "./textures";
+import { ViewKick } from "./ViewKick";
 
 const EYE_HEIGHT = 1.6;
 const PLAYER_HEIGHT = 1.8;
 const PING_INTERVAL_MS = 2000;
 const FOOTSTEP_INTERVAL_MS = 380;
+/** Metres of arena to one tile of the floor grid. */
+const GROUND_TILE_METRES = 4;
+/** Beyond this many metres another player's rifle is not worth hearing. */
+const SHOT_EARSHOT_METRES = 55;
+/** How fast the measured local speed catches up, per second. */
+const SPEED_TRACKING = 16;
+/** Ground covered between two frames that no stride explains. */
+const TELEPORT_METRES = 2;
+const MATCH_START_HORN = [392, 523, 659];
+const MATCH_END_STING = [659, 523, 392];
 
 export interface SceneApp {
     mount(container: HTMLElement): void;
@@ -51,12 +79,11 @@ export interface SceneApp {
     onLockedChange(cb: (locked: boolean) => void): () => void;
     /** Fired when a shot of ours lands, for the hit marker. */
     onHitConfirmed(cb: (headshot: boolean, killed: boolean) => void): () => void;
-}
-
-interface RemoteMesh {
-    group: THREE.Group;
-    body: THREE.Mesh;
-    head: THREE.Mesh;
+    /** Fired when a shot lands on us. `direction` is the bearing of the
+     * attacker in radians, zero straight ahead and positive to the
+     * right, which is what a directional damage indicator needs.
+     * `severity` is the damage as a fraction of full health. */
+    onDamaged(cb: (direction: number, severity: number) => void): () => void;
 }
 
 export function createSceneApp(): SceneApp {
@@ -71,14 +98,17 @@ export function createSceneApp(): SceneApp {
     rig.add(camera);
     scene.add(rig);
 
+    /* The sun alone leaves every face turned away from it black, which
+     * flattens cover into a silhouette and hides the edge a player is
+     * about to walk into. The sky fills those faces back in. */
     scene.add(
         new THREE.HemisphereLight(
             new THREE.Color(SCENE_COLORS.arenaSky),
             new THREE.Color(SCENE_COLORS.arenaGround),
-            0.65,
+            1.05,
         ),
     );
-    const sun = new THREE.DirectionalLight(0xfff0d8, 1.0);
+    const sun = new THREE.DirectionalLight(new THREE.Color(SCENE_COLORS.bg), 1.0);
     sun.position.set(18, 26, 12);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -91,9 +121,11 @@ export function createSceneApp(): SceneApp {
     sun.shadow.bias = -0.0004;
     scene.add(sun, sun.target);
 
+    const groundTexture = createGroundTexture();
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshStandardMaterial({
+            map: groundTexture,
             color: SCENE_COLORS.arenaGround,
             roughness: 0.95,
             metalness: 0.02,
@@ -102,6 +134,7 @@ export function createSceneApp(): SceneApp {
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     ground.name = "ground";
+    ground.layers.enable(SHOT_LAYER);
     scene.add(ground);
 
     const coverGroup = new THREE.Group();
@@ -110,11 +143,19 @@ export function createSceneApp(): SceneApp {
     playersGroup.name = "players";
     scene.add(coverGroup, playersGroup);
 
-    const particles = new ParticleSystem(scene);
+    const characters = new CharacterLibrary(PLAYER_HEIGHT);
+    const effects = new Effects(scene, camera);
+    const viewKick = new ViewKick();
+    const firstPerson = new FirstPerson(viewKick.motionReduced);
+    const shotRay = new ShotRay();
+    const shots = new ShotStream();
     const audio = new AudioEngine();
     const input = new InputController();
     const predictor = new Predictor();
     const buffer = new SnapshotBuffer();
+
+    /** What a shot may touch: the arena, and the bodies standing in it. */
+    const shotTargets: THREE.Object3D[] = [ground, coverGroup, playersGroup];
 
     let renderer: THREE.WebGLRenderer | null = null;
     let observer: ResizeObserver | null = null;
@@ -125,33 +166,58 @@ export function createSceneApp(): SceneApp {
     let arena: ArenaLike | null = null;
     let arenaId = "";
     let localAlive = true;
+    let localReloading = false;
+    let localMaxHp = 0;
+    let matchState: RoomSnapshot["state"] | null = null;
+    /** The arena's own diagonal: how far a shot that hits nothing runs. */
+    let shotRange = 0;
 
     let inputSeq = 0;
     let lastTick = 0;
     let lastPingAt = 0;
     let lastFootstepAt = 0;
+    let lookYaw = 0;
+    let lookPitch = 0;
+    let lastLookYaw = 0;
+    let lastLookPitch = 0;
+    let localSpeed = 0;
     const clock = new THREE.Clock();
 
     const stateHandlers = new Set<(r: RoomSnapshot) => void>();
     const localHandlers = new Set<(p: PlayerWire) => void>();
     const hitHandlers = new Set<(headshot: boolean, killed: boolean) => void>();
-    const remotes = new Map<string, RemoteMesh>();
+    const damageHandlers = new Set<(direction: number, severity: number) => void>();
+    const remotes = new Map<string, Avatar>();
+    /** The roster as of the last snapshot, so the frame loop never has
+     * to rebuild it out of an array it was handed. */
+    const roster = new Map<string, PlayerWire>();
+    const shotEvents: Shot[] = [];
 
     /* Scratch vectors, reused. Allocating in the frame loop is what
      * turns a smooth game into a stuttering one every few seconds. */
     const scratchMuzzle = new THREE.Vector3();
     const scratchForward = new THREE.Vector3();
+    const scratchEye = new THREE.Vector3();
+    const scratchImpact = new THREE.Vector3();
+    const scratchQuaternion = new THREE.Quaternion();
+    /** Where the player stood last frame, for measuring their speed. */
+    const lastLocalPosition = new THREE.Vector3();
 
     function rebuildArena(next: ArenaWire): void {
         arena = next;
         arenaId = next.id;
         const width = next.bounds_max.x - next.bounds_min.x;
         const depth = next.bounds_max.z - next.bounds_min.z;
+        shotRange = Math.hypot(width, depth);
         ground.scale.set(width, depth, 1);
         ground.position.set(
             (next.bounds_min.x + next.bounds_max.x) / 2,
             0,
             (next.bounds_min.z + next.bounds_max.z) / 2,
+        );
+        groundTexture.repeat.set(
+            width / GROUND_TILE_METRES,
+            depth / GROUND_TILE_METRES,
         );
 
         disposeChildren(coverGroup);
@@ -166,6 +232,7 @@ export function createSceneApp(): SceneApp {
             mesh.position.set(box.center.x, box.center.y, box.center.z);
             mesh.castShadow = true;
             mesh.receiveShadow = true;
+            mesh.layers.enable(SHOT_LAYER);
             coverGroup.add(mesh);
         }
         buildWalls(next);
@@ -196,58 +263,33 @@ export function createSceneApp(): SceneApp {
             const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
             wall.position.set(x, y, z);
             wall.receiveShadow = true;
+            wall.layers.enable(SHOT_LAYER);
             coverGroup.add(wall);
         }
     }
 
-    function makeRemote(player: PlayerWire): RemoteMesh {
-        const colour = new THREE.Color(
-            player.team === 2 ? SCENE_COLORS.team2 : SCENE_COLORS.team1,
-        );
-        const group = new THREE.Group();
-        group.name = `player-${player.id}`;
-        const material = new THREE.MeshStandardMaterial({
-            color: colour,
-            roughness: 0.55,
-        });
-        const body = new THREE.Mesh(
-            new THREE.CapsuleGeometry(0.45, PLAYER_HEIGHT - 0.9, 6, 12),
-            material,
-        );
-        body.position.y = PLAYER_HEIGHT / 2;
-        body.castShadow = true;
-        const head = new THREE.Mesh(
-            new THREE.SphereGeometry(0.24, 16, 16),
-            material.clone(),
-        );
-        head.position.y = EYE_HEIGHT;
-        head.castShadow = true;
-        group.add(body, head);
-        playersGroup.add(group);
-        return { group, body, head };
-    }
-
     function syncRemotes(now: number): void {
-        if (!room) return;
-        const known = new Map(room.players.map((p) => [p.id, p]));
-
         for (const sampled of buffer.sample(now, localPlayerId)) {
-            const player = known.get(sampled.id);
+            const player = roster.get(sampled.id);
             if (!player) continue;
-            let mesh = remotes.get(sampled.id);
-            if (!mesh) {
-                mesh = makeRemote(player);
-                remotes.set(sampled.id, mesh);
+            let avatar = remotes.get(sampled.id);
+            if (!avatar) {
+                avatar = new Avatar(playersGroup, characters, player.team, PLAYER_HEIGHT);
+                remotes.set(sampled.id, avatar);
             }
-            mesh.group.position.set(sampled.x, sampled.y, sampled.z);
-            mesh.group.rotation.y = sampled.yaw;
-            mesh.group.visible = sampled.isAlive;
+            avatar.setPose(
+                sampled.x,
+                sampled.y,
+                sampled.z,
+                sampled.yaw,
+                sampled.pitch,
+                sampled.isAlive,
+            );
         }
 
-        for (const [id, mesh] of remotes) {
-            if (known.has(id) && id !== localPlayerId) continue;
-            playersGroup.remove(mesh.group);
-            disposeObject(mesh.group);
+        for (const [id, avatar] of remotes) {
+            if (roster.has(id) && id !== localPlayerId) continue;
+            avatar.dispose();
             remotes.delete(id);
         }
     }
@@ -257,9 +299,14 @@ export function createSceneApp(): SceneApp {
         const now = performance.now();
         const sample = input.sample();
 
-        // 1. Look is local and instant.
-        camera.rotation.y = sample.yaw;
-        camera.rotation.x = clampPitch(sample.pitch);
+        // 1. Look is local and instant; the kick rides on top of it.
+        lookYaw = sample.yaw;
+        lookPitch = clampPitch(sample.pitch);
+        viewKick.update(dt);
+        camera.rotation.y = lookYaw + viewKick.yawOffset();
+        camera.rotation.x = clampPitch(lookPitch + viewKick.pitchOffset());
+        camera.rotation.z = viewKick.rollOffset();
+        camera.position.set(viewKick.shakeX(), viewKick.shakeY(), 0);
 
         // 2. Predict and send.
         const playing = room?.state === "playing";
@@ -286,7 +333,7 @@ export function createSceneApp(): SceneApp {
                     fire: sample.fire && localAlive,
                 },
                 yaw: sample.yaw,
-                pitch: clampPitch(sample.pitch),
+                pitch: lookPitch,
             });
 
             const weapon = input.takeWeaponSwitch();
@@ -309,17 +356,186 @@ export function createSceneApp(): SceneApp {
 
         // The rig carries locomotion; the camera only ever rotates.
         const position = predictor.current();
+        trackLocalSpeed(position.x, position.z, dt);
         rig.position.set(position.x, position.y + EYE_HEIGHT, position.z);
 
-        // 3. Everyone else, rendered slightly in the past.
+        // 3. Everyone else, rendered slightly in the past. Each avatar
+        //    reads its own locomotion out of how far it just moved.
         syncRemotes(now);
+        for (const avatar of remotes.values()) avatar.update(dt);
 
-        // 4. Effects and draw.
-        particles.update(dt);
-        if (renderer) renderer.render(scene, camera);
+        // 4. Effects, the weapon in hand, and the draw. The motion
+        //    preference lives on the kick, which watches it, so the
+        //    weapon reads it from there rather than watching it twice.
+        firstPerson.setMotionReduced(viewKick.motionReduced);
+        firstPerson.update(
+            dt,
+            localSpeed,
+            localReloading,
+            localAlive,
+            lookYaw - lastLookYaw,
+            lookPitch - lastLookPitch,
+        );
+        lastLookYaw = lookYaw;
+        lastLookPitch = lookPitch;
+        effects.update(dt);
+
+        if (renderer) {
+            renderer.clear();
+            renderer.render(scene, camera);
+            firstPerson.render(renderer);
+        }
         if (host && host.dataset.sceneReady !== "true") {
             host.dataset.sceneReady = "true";
         }
+    }
+
+    /* The weapon bobs at the rate the player is actually moving, and
+     * the predictor reports a position rather than a velocity, so the
+     * speed is measured the same way an avatar's is. */
+    function trackLocalSpeed(x: number, z: number, dt: number): void {
+        if (dt <= 0) return;
+        const travelled = Math.hypot(x - lastLocalPosition.x, z - lastLocalPosition.z);
+        lastLocalPosition.set(x, 0, z);
+        const measured = travelled > TELEPORT_METRES ? 0 : travelled / dt;
+        localSpeed += (measured - localSpeed) * Math.min(1, SPEED_TRACKING * dt);
+    }
+
+    /* One round, fired by the player holding this browser. The flash
+     * card is drawn in their own view; the arena gets the light, the
+     * tracer and whatever the round lands on. */
+    function fireLocal(): void {
+        if (shotRange <= 0) return;
+        firstPerson.fire();
+        viewKick.recoil();
+        audio.shot();
+
+        camera.getWorldQuaternion(scratchQuaternion);
+        scratchForward.set(0, 0, -1).applyQuaternion(scratchQuaternion).normalize();
+        scratchEye.copy(rig.position);
+        firstPerson.muzzleWorld(scratchMuzzle, camera);
+        markShot(scratchMuzzle, scratchEye, scratchForward);
+        effects.holderMuzzle(scratchMuzzle, scratchForward);
+    }
+
+    /* One round, fired by somebody else. Their aim is interpolated like
+     * the rest of them, so the ray is drawn from where they are seen to
+     * be looking rather than from where the server resolved it. */
+    function fireRemote(playerId: string): void {
+        const avatar = remotes.get(playerId);
+        if (!avatar || shotRange <= 0) return;
+        avatar.fire();
+        avatar.muzzlePoint(scratchMuzzle);
+        avatar.eyePoint(scratchEye, EYE_HEIGHT);
+        avatar.lookDirection(scratchForward);
+        markShot(scratchMuzzle, scratchEye, scratchForward);
+        effects.muzzleFlash(scratchMuzzle, scratchForward);
+        audio.shot(earshot(scratchMuzzle));
+    }
+
+    /** Draw the flight of one round: a streak from the gun to wherever
+     * the ray ends, and a mark on the world if that is what stopped it. */
+    function markShot(
+        from: THREE.Vector3,
+        eye: THREE.Vector3,
+        direction: THREE.Vector3,
+    ): void {
+        const hit = shotRay.cast(eye, direction, shotRange, shotTargets);
+        if (hit) scratchImpact.copy(hit.point);
+        else scratchImpact.copy(eye).addScaledVector(direction, shotRange);
+        effects.tracer(from, scratchImpact);
+        // A body is marked by the server's own `damage` message, which
+        // carries the point it actually landed on.
+        if (hit && !hit.body) effects.impact(hit.point, hit.normal);
+    }
+
+    /** How loud something at `at` is from where the player is standing. */
+    function earshot(at: THREE.Vector3): number {
+        const distance = at.distanceTo(rig.position);
+        return Math.max(0, 1 - distance / SHOT_EARSHOT_METRES);
+    }
+
+    /** The bearing of `playerId` relative to where the player is facing,
+     * zero straight ahead and positive to the right. */
+    function bearingTo(playerId: string): number {
+        const attacker = remotes.get(playerId);
+        if (!attacker) return 0;
+        const dx = attacker.group.position.x - rig.position.x;
+        const dz = attacker.group.position.z - rig.position.z;
+        // Forward is (-sin yaw, -cos yaw) and right is (cos yaw, -sin yaw),
+        // the convention `movement` walks and strafes by.
+        const ahead = -Math.sin(lookYaw) * dx - Math.cos(lookYaw) * dz;
+        const beside = Math.cos(lookYaw) * dx - Math.sin(lookYaw) * dz;
+        return Math.atan2(beside, ahead);
+    }
+
+    function takeDamage(attackerId: string, damage: number): void {
+        const severity = localMaxHp > 0 ? Math.min(1, damage / localMaxHp) : 0.5;
+        firstPerson.damaged(0.45 + severity * 0.55);
+        viewKick.jolt(0.3 + severity * 0.7);
+        audio.hurt();
+        const direction = bearingTo(attackerId);
+        for (const handler of damageHandlers) handler(direction, severity);
+    }
+
+    function readShots(players: PlayerWire[]): void {
+        shots.read(players, shotEvents);
+        for (const shot of shotEvents) {
+            for (let round = 0; round < shot.count; round++) {
+                if (shot.playerId === localPlayerId) fireLocal();
+                else fireRemote(shot.playerId);
+            }
+        }
+    }
+
+    /* A read-only window onto live scene state, for e2e specs.
+     *
+     * Every accessor here reads an actual object the renderer is using
+     * this frame: the camera's real rotation, the predictor's real
+     * position, the real lock state, the animation each avatar's own
+     * state machine settled on. None of it is a constant the production
+     * code carries for a test's benefit, which is the line this surface
+     * must not cross. A spec asserting on a hardcoded literal exported
+     * from here would attest nothing.
+     */
+    function exposeDebugSurface(): void {
+        (window as unknown as { __sfDebug: unknown }).__sfDebug = {
+            camera: () => ({ yaw: camera.rotation.y, pitch: camera.rotation.x }),
+            position: () => ({ ...predictor.current() }),
+            correction: () => predictor.correction(),
+            pendingInputs: () => predictor.pendingCount(),
+            locked: () => input.isLocked(),
+            remoteCount: () => remotes.size,
+            remotes: () =>
+                [...remotes.entries()].map(([id, avatar]) => ({
+                    id,
+                    x: avatar.group.position.x,
+                    y: avatar.group.position.y,
+                    z: avatar.group.position.z,
+                    visible: avatar.group.visible,
+                    animation: avatar.state(),
+                    speed: avatar.groundSpeed(),
+                })),
+            coverCount: () => coverGroup.children.length,
+            /* The arena the meshes were built from, which is not the same
+             * fact as the arena the last snapshot named: this one is only
+             * true once the scene has actually been rebuilt. */
+            sceneArenaId: () => arenaId,
+            /* The bounds the server sent, so a harness can read the map it
+             * was actually given rather than carry a copy of one. */
+            bounds: () =>
+                room
+                    ? { min: room.arena.bounds_min, max: room.arena.bounds_max }
+                    : null,
+            state: () => room?.state ?? null,
+            localId: () => localPlayerId,
+            characterLoaded: () => characters.loaded,
+            tracerCount: () => effects.tracerCount(),
+            decalCount: () => effects.decalCount(),
+            particleCount: () => effects.particles.liveCount(),
+            viewKick: () => viewKick.intensity(),
+            motionReduced: () => viewKick.motionReduced,
+        };
     }
 
     function adoptSnapshot(next: RoomSnapshot): void {
@@ -328,10 +544,24 @@ export function createSceneApp(): SceneApp {
         lastTick = next.tick;
         buffer.push(next.players, performance.now());
 
+        roster.clear();
+        for (const player of next.players) roster.set(player.id, player);
+
+        if (matchState !== next.state) {
+            if (matchState !== null && next.state === "playing") {
+                audio.sting(MATCH_START_HORN);
+            } else if (next.state === "results") {
+                audio.sting(MATCH_END_STING);
+            }
+            matchState = next.state;
+        }
+
         const me = next.players.find((p) => p.id === localPlayerId);
         if (me && arena) {
             const wasAlive = localAlive;
             localAlive = me.is_alive;
+            localReloading = me.is_reloading;
+            localMaxHp = me.max_hp;
             if (!wasAlive && me.is_alive) {
                 // Respawned somewhere the client never predicted, so
                 // adopt the server outright rather than correcting to it.
@@ -344,38 +574,13 @@ export function createSceneApp(): SceneApp {
             }
             for (const handler of localHandlers) handler(me);
         }
-        for (const handler of stateHandlers) handler(next);
-    }
 
-    /* A read-only window onto live scene state, for e2e specs.
-     *
-     * Every accessor here reads an actual object the renderer is using
-     * this frame: the camera's real rotation, the predictor's real
-     * position, the real lock state. None of it is a constant the
-     * production code carries for a test's benefit, which is the line
-     * this surface must not cross. A spec asserting on a hardcoded
-     * literal exported from here would attest nothing.
-     */
-    function exposeDebugSurface(): void {
-        (window as unknown as { __sfDebug: unknown }).__sfDebug = {
-            camera: () => ({ yaw: camera.rotation.y, pitch: camera.rotation.x }),
-            position: () => ({ ...predictor.current() }),
-            correction: () => predictor.correction(),
-            pendingInputs: () => predictor.pendingCount(),
-            locked: () => input.isLocked(),
-            remoteCount: () => remotes.size,
-            remotes: () =>
-                [...remotes.entries()].map(([id, mesh]) => ({
-                    id,
-                    x: mesh.group.position.x,
-                    y: mesh.group.position.y,
-                    z: mesh.group.position.z,
-                    visible: mesh.group.visible,
-                })),
-            coverCount: () => coverGroup.children.length,
-            state: () => room?.state ?? null,
-            localId: () => localPlayerId,
-        };
+        // The world first, then what it looked like. A snapshot's job is
+        // to tell the HUD and the menus what is true; the flashes and
+        // tracers it also implies are downstream of that and must never
+        // be able to stand in front of it.
+        for (const handler of stateHandlers) handler(next);
+        readShots(next.players);
     }
 
     function bindMatch(next: MatchClient): void {
@@ -392,6 +597,7 @@ export function createSceneApp(): SceneApp {
                 case "results":
                     if (msg.type === "match_started") {
                         buffer.clear();
+                        shots.clear();
                         inputSeq = 0;
                     }
                     adoptSnapshot(msg.room);
@@ -414,17 +620,12 @@ export function createSceneApp(): SceneApp {
                     break;
                 case "damage": {
                     if (msg.point) {
-                        particles.hit(
-                            new THREE.Vector3(msg.point.x, msg.point.y, msg.point.z),
-                        );
+                        scratchImpact.set(msg.point.x, msg.point.y, msg.point.z);
+                        effects.bodyImpact(scratchImpact);
                     }
-                    if (msg.attacker === localPlayerId) {
-                        audio.shot();
-                        scratchForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
-                        scratchMuzzle
-                            .copy(rig.position)
-                            .addScaledVector(scratchForward, 0.8);
-                        particles.muzzleFlash(scratchMuzzle, scratchForward);
+                    remotes.get(msg.victim)?.takeDamage();
+                    if (msg.victim === localPlayerId) {
+                        takeDamage(msg.attacker, msg.damage);
                     }
                     break;
                 }
@@ -443,6 +644,9 @@ export function createSceneApp(): SceneApp {
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            // The weapon in hand is drawn in a second pass, so clearing
+            // is this module's to schedule rather than the renderer's.
+            renderer.autoClear = false;
             container.appendChild(renderer.domElement);
 
             observer = new ResizeObserver(() => {
@@ -451,12 +655,17 @@ export function createSceneApp(): SceneApp {
                 const height = Math.max(host.clientHeight, 1);
                 camera.aspect = width / height;
                 camera.updateProjectionMatrix();
+                firstPerson.resize(width / height);
                 renderer.setSize(width, height, false);
             });
             observer.observe(container);
 
             input.attach(renderer.domElement);
             audio.ensure();
+            // Start fetching the character now rather than when the
+            // first opponent walks in, or they arrive as a silhouette
+            // and turn into a body a second later.
+            void characters.ready();
             exposeDebugSurface();
         },
         start() {
@@ -471,11 +680,18 @@ export function createSceneApp(): SceneApp {
             observer?.disconnect();
             observer = null;
             input.dispose();
-            particles.dispose();
+            viewKick.dispose();
+            for (const avatar of remotes.values()) avatar.dispose();
+            remotes.clear();
+            roster.clear();
+            effects.dispose();
+            firstPerson.dispose();
+            characters.dispose();
+            groundTexture.dispose();
             stateHandlers.clear();
             localHandlers.clear();
             hitHandlers.clear();
-            remotes.clear();
+            damageHandlers.clear();
             disposeObject(scene);
             renderer?.dispose();
             renderer?.domElement.remove();
@@ -495,7 +711,15 @@ export function createSceneApp(): SceneApp {
             hitHandlers.add(cb);
             return () => hitHandlers.delete(cb);
         },
+        onDamaged(cb) {
+            damageHandlers.add(cb);
+            return () => damageHandlers.delete(cb);
+        },
         requestLock() {
+            // A gesture is the only moment a browser will start audio,
+            // and it is the same gesture that takes the mouse.
+            audio.resume();
+            audio.setStarted(true);
             return input.requestLock();
         },
         isLocked() {
@@ -505,22 +729,4 @@ export function createSceneApp(): SceneApp {
             return input.onLockedChange(cb);
         },
     };
-}
-
-function disposeChildren(group: THREE.Group): void {
-    while (group.children.length > 0) {
-        const child = group.children[0];
-        group.remove(child);
-        disposeObject(child);
-    }
-}
-
-function disposeObject(root: THREE.Object3D): void {
-    root.traverse((node) => {
-        const mesh = node as THREE.Mesh;
-        mesh.geometry?.dispose();
-        const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
-        if (Array.isArray(material)) for (const m of material) m.dispose();
-        else material?.dispose();
-    });
 }
