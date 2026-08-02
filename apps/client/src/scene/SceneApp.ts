@@ -39,7 +39,7 @@ import type { MatchClient } from "../net/MatchClient";
 import type { ArenaWire, PlayerWire, RoomSnapshot } from "../net/protocol";
 import { Predictor } from "../sim/Predictor";
 import { SnapshotBuffer } from "../sim/SnapshotBuffer";
-import { clampPitch, type ArenaLike } from "../sim/movement";
+import { MAX_FRAME_DT, clampPitch, type ArenaLike } from "../sim/movement";
 import { Avatar } from "./Avatar";
 import { CharacterLibrary } from "./CharacterLibrary";
 import { disposeChildren, disposeObject } from "./dispose";
@@ -53,6 +53,12 @@ import { ViewKick } from "./ViewKick";
 const EYE_HEIGHT = 1.6;
 const PLAYER_HEIGHT = 1.8;
 const PING_INTERVAL_MS = 2000;
+
+/* Longest render frame that can still be simulated in full, expressed as
+ * a count of simulation slices. The server grants at most 0.25s of banked
+ * simulation time, so anything past five slices is time it would refuse
+ * anyway; the rest is headroom for a machine that stalled outright. */
+const MAX_INPUT_SUBSTEPS = 8;
 const FOOTSTEP_INTERVAL_MS = 380;
 /** Metres of arena to one tile of the floor grid. */
 const GROUND_TILE_METRES = 4;
@@ -295,7 +301,7 @@ export function createSceneApp(): SceneApp {
     }
 
     function frame(): void {
-        const dt = Math.min(0.1, clock.getDelta());
+        const dt = Math.min(MAX_FRAME_DT * MAX_INPUT_SUBSTEPS, clock.getDelta());
         const now = performance.now();
         const sample = input.sample();
 
@@ -308,33 +314,56 @@ export function createSceneApp(): SceneApp {
         camera.rotation.z = viewKick.rollOffset();
         camera.position.set(viewKick.shakeX(), viewKick.shakeY(), 0);
 
-        // 2. Predict and send.
+        // 2. Predict and send, in slices no longer than the simulation
+        //    will honour.
+        //
+        //    `movement.step` clamps any frame it is given to MAX_FRAME_DT
+        //    so that a forged duration buys no distance, and the client
+        //    runs the same routine. A render frame longer than that ceiling
+        //    sent whole would therefore travel the ceiling's worth of
+        //    ground and no more, which quietly makes walking speed a
+        //    function of frame rate: a machine at 10fps walks at half
+        //    pace, and one on software rendering barely moves.
+        //
+        //    Slicing a long frame into several honest short ones fixes
+        //    that without weakening anything, because the guard that
+        //    actually bounds a cheat is the server's real-time budget,
+        //    not this ceiling. Slices let an honest slow client keep up;
+        //    they let no client get ahead.
         const playing = room?.state === "playing";
         if (playing && arena && client && localPlayerId) {
-            inputSeq += 1;
-            const intent = {
-                dt,
-                yaw: sample.yaw,
-                forward: sample.forward,
-                back: sample.back,
-                left: sample.left,
-                right: sample.right,
-            };
-            if (localAlive) predictor.predict(inputSeq, intent, arena);
-            client.sendInput({
-                seq: inputSeq,
-                dt,
-                ack_tick: lastTick,
-                buttons: {
+            let unsent = dt;
+            do {
+                const slice = Math.min(unsent, MAX_FRAME_DT);
+                unsent -= slice;
+                inputSeq += 1;
+                const intent = {
+                    dt: slice,
+                    yaw: sample.yaw,
                     forward: sample.forward,
                     back: sample.back,
                     left: sample.left,
                     right: sample.right,
-                    fire: sample.fire && localAlive,
-                },
-                yaw: sample.yaw,
-                pitch: lookPitch,
-            });
+                };
+                if (localAlive) predictor.predict(inputSeq, intent, arena);
+                client.sendInput({
+                    seq: inputSeq,
+                    dt: slice,
+                    ack_tick: lastTick,
+                    buttons: {
+                        forward: sample.forward,
+                        back: sample.back,
+                        left: sample.left,
+                        right: sample.right,
+                        fire: sample.fire && localAlive,
+                    },
+                    yaw: sample.yaw,
+                    pitch: lookPitch,
+                });
+                // At least one frame always goes, even at dt 0: it carries
+                // the look angles and the trigger, which move no distance
+                // but still have to reach the server.
+            } while (unsent > 0);
 
             const weapon = input.takeWeaponSwitch();
             if (weapon) client.switchWeapon(weapon);
