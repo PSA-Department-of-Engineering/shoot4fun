@@ -56,7 +56,10 @@ export default defineConfig({
                   env: { DATABASE_URL: "", DISABLE_TICK_LOOP: "0" },
               },
               {
-                  command: "npm run preview",
+                  // Build before serving: `playwright test` on its own
+                  // serves whatever is already in dist/, so a stale
+                  // bundle silently tests the previous commit.
+                  command: "npm run build && npm run preview",
                   url: `http://localhost:${PORT}`,
                   reuseExistingServer: !process.env.CI,
                   timeout: 120_000,

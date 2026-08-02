@@ -26,6 +26,9 @@ interface DebugSurface {
     bounds(): { min: Vec3; max: Vec3 } | null;
     state(): string | null;
     localId(): string;
+    health(): number | null;
+    minHealth(): number | null;
+    framesRendered(): number;
 }
 
 interface Vec3 {
@@ -153,28 +156,23 @@ async function aimAtOpponent(page: Page): Promise<void> {
     });
 }
 
-/** Hold the trigger for `ms`, returning the lowest health seen on the
- * victim's own screen while it was held. Sampling during the burst
- * rather than after it means a respawn cannot un-see the hit. */
-async function burstAndWatch(
-    page: Page,
-    health: ReturnType<Page["locator"]>,
-    ms: number,
-): Promise<number> {
-    let lowest = 100;
-    await page.mouse.down();
+/** Hold the trigger for `ms`, then report the lowest health the victim's
+ * own client has ever been told it had.
+ *
+ * The floor is recorded by the victim's client as snapshots arrive, not
+ * sampled by the test. Polling across a process boundary cannot see a
+ * hit reliably: damage lands, and three seconds later the respawn puts
+ * health back to full, so a sampler that is slower than that reads an
+ * untouched player and calls a working hit path broken. */
+async function burstAndWatch(shooter: Page, victim: Page, ms: number): Promise<number> {
+    await shooter.mouse.down();
     try {
-        const until = Date.now() + ms;
-        while (Date.now() < until) {
-            const shown = Number(await health.textContent());
-            if (Number.isFinite(shown)) lowest = Math.min(lowest, shown);
-            if (lowest < 100) break;
-            await page.waitForTimeout(120);
-        }
+        await shooter.waitForTimeout(ms);
     } finally {
-        await page.mouse.up();
+        await shooter.mouse.up();
     }
-    return lowest;
+    const floor = await victim.evaluate(() => window.__sfDebug.minHealth());
+    return typeof floor === "number" ? floor : 100;
 }
 
 /* Hold `key` until `metres` have been covered, or give up.
@@ -350,7 +348,7 @@ test.describe("a match", () => {
             let lowest = 100;
             for (let approach = 0; approach < 12 && lowest === 100; approach++) {
                 await aimAtOpponent(host);
-                lowest = await burstAndWatch(host, guestHp, 1_500);
+                lowest = await burstAndWatch(host, guest, 1_500);
                 if (lowest < 100) break;
 
                 // Nothing landed, so cover is in the way or the range is

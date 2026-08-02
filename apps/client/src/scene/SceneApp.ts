@@ -117,7 +117,12 @@ export function createSceneApp(): SceneApp {
     const sun = new THREE.DirectionalLight(new THREE.Color(SCENE_COLORS.bg), 1.0);
     sun.position.set(18, 26, 12);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    // 1024 is the shadow budget for an arena this size: the map is lit by
+    // one directional light over 90m, and doubling the texture quadruples
+    // the fill cost for a difference no player reads at 1.6m eye height.
+    // It also keeps the game rendering at a playable rate without a GPU,
+    // which is what a browser game running on software rasterization gets.
+    sun.shadow.mapSize.set(1024, 1024);
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 90;
     sun.shadow.camera.left = -45;
@@ -182,6 +187,13 @@ export function createSceneApp(): SceneApp {
     let lastTick = 0;
     let lastPingAt = 0;
     let lastFootstepAt = 0;
+    let framesRendered = 0;
+    /* Lowest health the server has ever reported for this client. A
+     * poll can miss a hit entirely: damage lands and the respawn puts
+     * health back to full three seconds later, so any sampler slower
+     * than that reads an untouched player. The client sees every
+     * snapshot, so it records the floor itself. */
+    let minHealthSeen = Number.POSITIVE_INFINITY;
     let lookYaw = 0;
     let lookPitch = 0;
     let lastLookYaw = 0;
@@ -412,6 +424,7 @@ export function createSceneApp(): SceneApp {
         if (renderer) {
             renderer.clear();
             renderer.render(scene, camera);
+            framesRendered += 1;
             firstPerson.render(renderer);
         }
         if (host && host.dataset.sceneReady !== "true") {
@@ -558,6 +571,16 @@ export function createSceneApp(): SceneApp {
                     : null,
             state: () => room?.state ?? null,
             localId: () => localPlayerId,
+            /* This client's own hit points, as the server last sent them.
+             * The HUD renders the same number, but reading it from the DOM
+             * makes an assertion about damage depend on the victim's page
+             * getting a frame to repaint in, which on software rendering
+             * it may not. The value is still server-authored and still
+             * read on the victim's own client. */
+            health: () => room?.players.find((p) => p.id === localPlayerId)?.hp ?? null,
+            framesRendered: () => framesRendered,
+            minHealth: () =>
+                Number.isFinite(minHealthSeen) ? minHealthSeen : null,
             characterLoaded: () => characters.loaded,
             tracerCount: () => effects.tracerCount(),
             decalCount: () => effects.decalCount(),
@@ -601,6 +624,7 @@ export function createSceneApp(): SceneApp {
             } else {
                 predictor.reset(me.position);
             }
+            minHealthSeen = Math.min(minHealthSeen, me.hp);
             for (const handler of localHandlers) handler(me);
         }
 
