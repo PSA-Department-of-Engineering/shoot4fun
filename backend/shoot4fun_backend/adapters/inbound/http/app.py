@@ -16,7 +16,7 @@ from shoot4fun_backend import __version__
 from shoot4fun_backend.adapters.inbound.http.exception_handlers import (
     register_exception_handler,
 )
-from shoot4fun_backend.adapters.inbound.http.routers import leaderboard, system
+from shoot4fun_backend.adapters.inbound.http.routers import arenas, leaderboard, system
 from shoot4fun_backend.container import Container
 from shoot4fun_backend.logging import configure_logging, get_logger
 
@@ -44,6 +44,7 @@ def create_app() -> FastAPI:
     )
     register_exception_handler(app)
     app.include_router(system.router, prefix="/api", tags=["system"])
+    app.include_router(arenas.router, prefix="/api", tags=["arenas"])
     app.include_router(
         leaderboard.build_router(container),
         prefix="/api",
