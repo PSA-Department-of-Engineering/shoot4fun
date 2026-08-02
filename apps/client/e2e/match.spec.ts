@@ -29,6 +29,7 @@ interface DebugSurface {
     health(): number | null;
     minHealth(): number | null;
     framesRendered(): number;
+    lookYaw(): number;
     ammo(): number | null;
 }
 
@@ -142,7 +143,10 @@ async function aimAtOpponent(page: Page): Promise<void> {
         // Forward is (-sin(yaw), 0, -cos(yaw)), so the yaw that points
         // at (dx, dz) is atan2(-dx, -dz).
         const wanted = Math.atan2(-(them.x - me.x), -(them.z - me.z));
-        let delta = (wanted - window.__sfDebug.camera().yaw) % (Math.PI * 2);
+        // Correct against where the controller is pointing, not
+        // where the camera last drew: on a slow machine the two
+        // differ by a frame and corrections compound into a spin.
+        let delta = (wanted - window.__sfDebug.lookYaw()) % (Math.PI * 2);
         if (delta > Math.PI) delta -= Math.PI * 2;
         if (delta < -Math.PI) delta += Math.PI * 2;
         // The controller applies yaw -= movementX * sensitivity.
@@ -185,7 +189,7 @@ async function describeAim(page: Page, attempt: number): Promise<string> {
         return {
             me: { x: me.x, z: me.z },
             them: them ? { x: them.x, z: them.z } : null,
-            yaw: window.__sfDebug.camera().yaw,
+            yaw: window.__sfDebug.lookYaw(),
             wanted: them ? Math.atan2(-(them.x - me.x), -(them.z - me.z)) : null,
             locked: window.__sfDebug.locked(),
             frames: window.__sfDebug.framesRendered(),
@@ -195,8 +199,15 @@ async function describeAim(page: Page, attempt: number): Promise<string> {
     const range = state.them
         ? Math.hypot(state.them.x - state.me.x, state.them.z - state.me.z)
         : NaN;
-    const offBy =
-        state.wanted === null ? NaN : Math.abs(state.wanted - state.yaw);
+    // Normalised: yaw wraps, so a raw difference reports a turn of
+    // 9 radians where the shooter is a degree off.
+    let offBy = NaN;
+    if (state.wanted !== null) {
+        let d = (state.wanted - state.yaw) % (Math.PI * 2);
+        if (d > Math.PI) d -= Math.PI * 2;
+        if (d < -Math.PI) d += Math.PI * 2;
+        offBy = Math.abs(d);
+    }
     return (
         `  #${attempt} at (${state.me.x.toFixed(1)}, ${state.me.z.toFixed(1)})` +
         ` target ${state.them ? `(${state.them.x.toFixed(1)}, ${state.them.z.toFixed(1)})` : "unknown"}` +

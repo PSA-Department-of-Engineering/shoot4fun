@@ -579,6 +579,12 @@ export function createSceneApp(): SceneApp {
              * read on the victim's own client. */
             health: () => room?.players.find((p) => p.id === localPlayerId)?.hp ?? null,
             framesRendered: () => framesRendered,
+            /* Where the player is pointing right now, straight off the
+             * input controller. `camera()` reports where the renderer
+             * last put it, which lags by up to a frame: anything that
+             * computes a correction against that reading over-rotates
+             * on a machine drawing a few frames a second. */
+            lookYaw: () => input.sample().yaw,
             ammo: () =>
                 room?.players.find((p) => p.id === localPlayerId)?.ammo ?? null,
             minHealth: () =>
