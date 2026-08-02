@@ -1,0 +1,130 @@
+# shoot4fun test gate: this app's own suites, run on every push and pull request.
+#
+# Why this workflow exists.
+#
+# The platform's shared reusable workflow (called from build.yml) audits
+# csd-intent markers, runs platform conformance, then builds and releases the
+# images. Those gates are about the app's shape and its fit on the platform:
+# they are all satisfied by a build whose game does not work, because none of
+# them execute the app's tests: a release can be green on every one of them
+# and unplayable. This workflow is the other half: it runs the backend
+# simulation tests, the
+# shared movement trace gate on the client, and the two-browser end-to-end
+# match against a real server, so a broken game fails before it ships.
+#
+# Scope: this lives in this repo, per app. The shared ci repo is used by every
+# app on the platform, so extending it is a platform-wide act, and that is not
+# authorised here.
+#
+# Runners: ubuntu-latest, deliberately, not the in-cluster ARC runners. The
+# gate has to hold whether or not the cluster is up.
+
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: backend (pytest, ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install backend and test dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: pytest
+        working-directory: backend
+        run: python -m pytest -q
+
+      - name: ruff
+        working-directory: backend
+        run: python -m ruff check .
+
+  client:
+    name: client (tsc, vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+
+      - name: Install client dependencies
+        working-directory: apps/client
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: apps/client
+        run: npx tsc --noEmit
+
+      - name: vitest (shared movement trace gate)
+        working-directory: apps/client
+        run: npm test
+
+  e2e:
+    name: e2e (two browsers, real server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+
+      # Playwright starts the uvicorn backend itself, so the server has to be
+      # importable from the runner's default interpreter.
+      - name: Install backend
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Install client dependencies
+        working-directory: apps/client
+        run: npm ci
+
+      - name: Install Playwright chromium
+        working-directory: apps/client
+        run: npx playwright install --with-deps chromium
+
+      # `vite preview` serves dist/, so the bundle must exist before the
+      # webServer starts.
+      - name: Build client
+        working-directory: apps/client
+        run: npm run build
+
+      - name: playwright test
+        working-directory: apps/client
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/client/playwright-report
+            apps/client/test-results
+          retention-days: 7
