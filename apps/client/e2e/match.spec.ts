@@ -177,6 +177,32 @@ async function burstAndWatch(
     return lowest;
 }
 
+/* Hold `key` until `metres` have been covered, or give up.
+ *
+ * Returns whether the distance was made. Walking into a wall stalls
+ * rather than fails: the arena is allowed to have walls in it, and a
+ * caller that wants to get somewhere needs to know it was blocked so it
+ * can try another way. */
+async function advance(
+    page: Page,
+    key: string,
+    metres: number,
+    timeoutMs: number,
+): Promise<boolean> {
+    const from = await positionOf(page);
+    await page.keyboard.down(key);
+    try {
+        const until = Date.now() + timeoutMs;
+        while (Date.now() < until) {
+            if (distanceFrom(from, await positionOf(page)) >= metres) return true;
+            await page.waitForTimeout(150);
+        }
+        return false;
+    } finally {
+        await page.keyboard.up(key);
+    }
+}
+
 /** Click the gate to take pointer lock, the way a player does. */
 async function capturePointer(page: Page): Promise<void> {
     const gate = page.locator("[data-gate]");
@@ -297,7 +323,9 @@ test.describe("a match", () => {
         "INT-004",
         "firing_at_an_opponent_takes_their_hit_points_down",
         async ({ browser }) => {
-            test.setTimeout(120_000);
+            // Up to a dozen approach attempts, each with a burst and a
+            // walk, on a runner that may render a few frames a second.
+            test.setTimeout(300_000);
             const room = `E2E${Date.now().toString(36).slice(-5).toUpperCase()}`;
             const { host, guest } = await startedMatch(browser, room);
             await capturePointer(host);
@@ -320,21 +348,19 @@ test.describe("a match", () => {
                 .toBeGreaterThan(0);
 
             let lowest = 100;
-            for (let approach = 0; approach < 10 && lowest === 100; approach++) {
+            for (let approach = 0; approach < 12 && lowest === 100; approach++) {
                 await aimAtOpponent(host);
-                lowest = await burstAndWatch(host, guestHp, 2_000);
+                lowest = await burstAndWatch(host, guestHp, 1_500);
                 if (lowest < 100) break;
 
-                // Nothing landed, so there is cover in the way or the
-                // range is long. Step toward them and try again.
-                const from = await positionOf(host);
-                await host.keyboard.down("w");
-                await expect
-                    .poll(async () => distanceFrom(from, await positionOf(host)), {
-                        timeout: 20_000,
-                    })
-                    .toBeGreaterThan(4);
-                await host.keyboard.up("w");
+                // Nothing landed, so cover is in the way or the range is
+                // long. Walk at them; if a wall stops that, sidestep to
+                // look for the way around, then aim again next time
+                // round. Between them those two moves get through an
+                // arena built out of walls and gaps, without the test
+                // needing to know where this arena put them.
+                const closed = await advance(host, "w", 3, 6_000);
+                if (!closed) await advance(host, "d", 3, 6_000);
             }
 
             // The server raycast it, so the drop shows on the victim's
