@@ -7,7 +7,7 @@
  *
  * It is deliberately UI-driven rather than socket-driven. A test that opens
  * a WebSocket and sends `set_ready` itself passes even when the game is
- * unplayable, because the server answers `set_ready` perfectly well — the
+ * unplayable, because the server answers `set_ready` perfectly well: the
  * bug this guards against is that the client is never told which room it
  * joined, so `main.ts`'s `scene.onState` never fires, `surface.show("lobby")`
  * never runs, and no Ready button ever exists for a human to click. The
@@ -59,7 +59,7 @@ intent('INT-011', 'two_players_can_ready_up_and_start_a_match_in_the_browser', a
 
     /* The regression guard: the lobby has to exist for a player at all. If the
      * server never sends the joining client a room snapshot, this is where it
-     * fails — no Ready button is ever rendered. */
+     * fails, and no Ready button is ever rendered. */
     await expect(
         host.locator('[data-ready]'),
         'the host never got a lobby (no room snapshot delivered on join)',

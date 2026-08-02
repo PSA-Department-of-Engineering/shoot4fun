@@ -3,7 +3,7 @@
  * The same HSL values flow into the 3D scene via src/brand/tokens.ts.
  */
 
-/* Self-hosted per design.md §1.2 / brand.md "Typography" — no runtime
+/* Self-hosted per design.md §1.2 / brand.md "Typography": no runtime
  * Google Fonts @import. */
 @font-face {
     font-family: "Russo One";

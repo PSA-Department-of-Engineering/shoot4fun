@@ -2,7 +2,7 @@
  * Renders crosshair, health bar, ammo, scoreboard summary, hit
  * indicator, and the respawn countdown. The DOM is mounted into a
  * single `<div class="hud">` and updated by `update(state, localId)`.
- * All values come from the server snapshot — the HUD is read-only.
+ * All values come from the server snapshot; the HUD is read-only.
  */
 
 import type { PlayerWire, RoomSnapshot } from "../net/protocol";

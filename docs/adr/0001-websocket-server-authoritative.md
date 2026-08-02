@@ -28,7 +28,7 @@ them under a per-room `asyncio.Lock`, advances the world at a
 fixed 20Hz tick, and broadcasts the resulting state to all
 players in the room.
 
-The client never sends a `position` or a `velocity` directly —
+The client never sends a `position` or a `velocity` directly:
 there is no `position_set` or `teleport` message in the wire
 protocol. Any client message that claims to mutate state outside
 the `input` handler is silently ignored by the server (asserted by

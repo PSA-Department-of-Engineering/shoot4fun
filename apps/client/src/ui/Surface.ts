@@ -141,7 +141,7 @@ function renderSettings(_ctx: SurfaceContext): string {
         <h2>Mouse</h2>
         <label>Sensitivity <input class="input" type="range" min="0.0005" max="0.005" step="0.0001" value="${sensitivity}" data-sensitivity></label>
         <h2>Keybinds</h2>
-        <p style="font-family: var(--font-mono);">W A S D — move · Mouse — look · Click — fire · 1 / 2 — weapon · R — reload · ESC — pause · M — master mute · S — SFX mute</p>
+        <p style="font-family: var(--font-mono);">W A S D move · Mouse look · Click fire · 1 / 2 weapon · R reload · ESC release the mouse</p>
         <div class="row" style="margin-top:1rem; gap:.5rem;">
             <button class="btn" data-close>Close</button>
         </div>
