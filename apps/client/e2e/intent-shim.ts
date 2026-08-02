@@ -12,12 +12,30 @@
  * import and the tests still pass.
  */
 
-import { test as base } from "@playwright/test";
+import {
+    test as base,
+    type PlaywrightTestArgs,
+    type PlaywrightTestOptions,
+    type PlaywrightWorkerArgs,
+    type PlaywrightWorkerOptions,
+    type TestInfo,
+} from "@playwright/test";
+
+/* Spelled out rather than read off `test` with Parameters<>. `test` is
+ * overloaded, and that indexed access resolves to the `TestDetails`
+ * overload, which types every caller's `{ browser }` as an error. */
+type TestBody = (
+    args: PlaywrightTestArgs &
+        PlaywrightTestOptions &
+        PlaywrightWorkerArgs &
+        PlaywrightWorkerOptions,
+    testInfo: TestInfo,
+) => Promise<void> | void;
 
 export function intent(
     claimId: string | string[],
     name: string,
-    fn: Parameters<typeof base>[1],
+    fn: TestBody,
 ): void {
     const ids = Array.isArray(claimId) ? claimId : [claimId];
     for (const id of ids) {

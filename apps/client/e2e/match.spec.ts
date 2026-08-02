@@ -398,9 +398,10 @@ test.describe("a match", () => {
 
             // The server raycast it, so the drop shows on the victim's
             // own client and not merely on the shooter's.
-            expect(lowest, `no shot landed:
-${telemetry.join("
-")}`).toBeLessThan(100);
+            expect(
+                lowest,
+                ["no shot landed:", ...telemetry].join("\n"),
+            ).toBeLessThan(100);
         },
     );
 

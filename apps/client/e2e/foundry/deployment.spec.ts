@@ -8,7 +8,7 @@
  * hostname is read from the deployment's manifest entry. The test
  * probes the public URL the app onboards to.
  */
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { intent } from '../intent-shim';
 
 const HOST = process.env.SHOOT4FUN_HOST ?? 'https://shoot4fun.chaos-architect.dev';
