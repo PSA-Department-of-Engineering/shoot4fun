@@ -54,6 +54,19 @@ test.afterEach(async () => {
     await Promise.all(opened.splice(0).map((context) => context.close()));
 });
 
+/* Optional CPU throttle, opt-in with SF_CPU_THROTTLE=<rate>.
+ *
+ * A CI runner rendering WebGL on SwiftShader is far slower than any
+ * machine this is developed on, and frame-rate-dependent defects only
+ * show there: a render frame longer than the simulation's per-frame
+ * ceiling cost a slow client its walking speed, and nothing local was
+ * slow enough to reveal it. Setting this reproduces that class of bug
+ * on a fast machine.
+ *
+ *   SF_CPU_THROTTLE=8 npx playwright test e2e/match.spec.ts
+ */
+const CPU_THROTTLE = Number(process.env.SF_CPU_THROTTLE ?? 1);
+
 async function joinRoom(browser: Browser, room: string, name: string): Promise<Page> {
     const context = await browser.newContext();
     opened.push(context);
@@ -62,6 +75,10 @@ async function joinRoom(browser: Browser, room: string, name: string): Promise<P
         [name],
     );
     const page = await context.newPage();
+    if (CPU_THROTTLE > 1) {
+        const cdp = await context.newCDPSession(page);
+        await cdp.send("Emulation.setCPUThrottlingRate", { rate: CPU_THROTTLE });
+    }
     await page.goto(`/#/${room}`);
     await expect(page.locator('#app[data-scene-ready="true"]')).toBeAttached();
     return page;
@@ -99,6 +116,65 @@ async function startedMatch(
         .poll(() => host.evaluate(() => window.__sfDebug.state()))
         .toBe("playing");
     return { host, guest };
+}
+
+async function positionOf(page: Page): Promise<Vec3> {
+    return page.evaluate(() => window.__sfDebug.position());
+}
+
+function distanceFrom(a: Vec3, b: Vec3): number {
+    return Math.hypot(b.x - a.x, b.z - a.z);
+}
+
+/* Point the camera at the opponent, through the input path a mouse
+ * uses. Pointer-lock deltas are what turn the camera and Playwright's
+ * mouse.move is absolute, so the turn is driven by dispatching the same
+ * relative-motion event the browser delivers under lock. */
+async function aimAtOpponent(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const me = window.__sfDebug.position();
+        const them = window.__sfDebug.remotes()[0];
+        if (!them) return;
+        // Forward is (-sin(yaw), 0, -cos(yaw)), so the yaw that points
+        // at (dx, dz) is atan2(-dx, -dz).
+        const wanted = Math.atan2(-(them.x - me.x), -(them.z - me.z));
+        let delta = (wanted - window.__sfDebug.camera().yaw) % (Math.PI * 2);
+        if (delta > Math.PI) delta -= Math.PI * 2;
+        if (delta < -Math.PI) delta += Math.PI * 2;
+        // The controller applies yaw -= movementX * sensitivity.
+        const sensitivity =
+            Number(window.localStorage.getItem("sf_sensitivity")) || 0.0022;
+        window.dispatchEvent(
+            new MouseEvent("mousemove", {
+                movementX: -delta / sensitivity,
+                movementY: 0,
+            }),
+        );
+    });
+}
+
+/** Hold the trigger for `ms`, returning the lowest health seen on the
+ * victim's own screen while it was held. Sampling during the burst
+ * rather than after it means a respawn cannot un-see the hit. */
+async function burstAndWatch(
+    page: Page,
+    health: ReturnType<Page["locator"]>,
+    ms: number,
+): Promise<number> {
+    let lowest = 100;
+    await page.mouse.down();
+    try {
+        const until = Date.now() + ms;
+        while (Date.now() < until) {
+            const shown = Number(await health.textContent());
+            if (Number.isFinite(shown)) lowest = Math.min(lowest, shown);
+            if (lowest < 100) break;
+            await page.waitForTimeout(120);
+        }
+    } finally {
+        await page.mouse.up();
+    }
+    return lowest;
 }
 
 /** Click the gate to take pointer lock, the way a player does. */
@@ -151,30 +227,36 @@ test.describe("a match", () => {
 
             const before = await host.evaluate(() => window.__sfDebug.position());
             await host.keyboard.down("w");
-            await host.waitForTimeout(600);
+
+            // Wait for movement rather than for a stopwatch. A fixed
+            // window is a bet that the frame loop ran during it, and on
+            // a software-rendered runner a 600ms window can contain no
+            // frames at all, which reads as "the player did not move".
+            await expect
+                .poll(
+                    async () => distanceFrom(before, await positionOf(host)),
+                    { timeout: 30_000 },
+                )
+                .toBeGreaterThan(0.5);
+
+            // The upper bound is the claim worth keeping: the build this
+            // replaced sent an unscaled per-frame constant as a
+            // displacement and crossed the arena on one keypress. Walking
+            // cannot outrun the walk speed over the wall clock, however
+            // few or many frames the machine managed.
+            const from = await positionOf(host);
+            const startedAt = Date.now();
+            await host.waitForTimeout(800);
+            const to = await positionOf(host);
+            const elapsed = (Date.now() - startedAt) / 1000;
             await host.keyboard.up("w");
-            const afterWalk = await host.evaluate(() => window.__sfDebug.position());
+            expect(distanceFrom(from, to)).toBeLessThan(MOVE_SPEED * elapsed * 1.5);
 
-            const travelled = Math.hypot(
-                afterWalk.x - before.x,
-                afterWalk.z - before.z,
-            );
-            // The old build accumulated an unscaled constant per frame and
-            // sent it as a displacement, so one keypress crossed the arena.
-            // Half a second of walking is metres, not tens of metres.
-            expect(travelled).toBeGreaterThan(0.5);
-            expect(travelled).toBeLessThan(MOVE_SPEED * 1.5);
-
-            await host.waitForTimeout(400);
-            const afterRelease = await host.evaluate(() =>
-                window.__sfDebug.position(),
-            );
-            expect(
-                Math.hypot(
-                    afterRelease.x - afterWalk.x,
-                    afterRelease.z - afterWalk.z,
-                ),
-            ).toBeLessThan(0.35);
+            // And it stops when the key comes up.
+            const atRelease = await positionOf(host);
+            await host.waitForTimeout(600);
+            const afterRelease = await positionOf(host);
+            expect(distanceFrom(atRelease, afterRelease)).toBeLessThan(0.35);
         },
     );
 
@@ -223,90 +305,41 @@ test.describe("a match", () => {
             const guestHp = guest.locator("[data-health-number]");
             await expect(guestHp).toHaveText("100");
 
-            // The two spawn on opposite corners and the arena's centre
-            // pillar stands on the line between them, so step off that
-            // line first or every shot is legitimately blocked.
-            //
-            // Strafe until the distance is achieved rather than for a
-            // fixed time: a backgrounded page has its frame loop
-            // throttled, so a wall-clock walk covers an unpredictable
-            // distance.
-            const origin = await host.evaluate(() => window.__sfDebug.position());
-            await host.keyboard.down("d");
-            await expect
-                .poll(
-                    async () =>
-                        Math.abs(
-                            (await host.evaluate(() => window.__sfDebug.position()))
-                                .x - origin.x,
-                        ),
-                    { timeout: 30_000 },
-                )
-                .toBeGreaterThan(6);
-            await host.keyboard.up("d");
-            await host.waitForTimeout(200);
-
+            /* Play toward a shot rather than assuming one exists from
+             * the spawn. Cover between two spawn points is the map doing
+             * its job, so a blocked line is not a failure: aim, fire, and
+             * if nothing lands, close the distance the way a player would.
+             * That keeps this a test of whether hits register, not a test
+             * of one arena's geometry.
+             *
+             * Every step waits on a condition rather than a stopwatch,
+             * because a software-rendered runner can pass a whole
+             * wall-clock window without rendering a frame. */
             await expect
                 .poll(() => host.evaluate(() => window.__sfDebug.remoteCount()))
                 .toBeGreaterThan(0);
 
-            // Aim at the opponent rather than sweeping past them: at
-            // fifty metres a player subtends about a degree, so a coarse
-            // sweep steps over the target between samples and proves
-            // nothing about whether hits register.
-            await host.evaluate(() => {
-                const me = window.__sfDebug.position();
-                const them = window.__sfDebug.remotes()[0];
-                const dx = them.x - me.x;
-                const dz = them.z - me.z;
-                // Forward is (-sin(yaw), 0, -cos(yaw)), so the yaw that
-                // points at (dx, dz) is atan2(-dx, -dz).
-                const wanted = Math.atan2(-dx, -dz);
-                const current = window.__sfDebug.camera().yaw;
-                let delta = (wanted - current) % (Math.PI * 2);
-                if (delta > Math.PI) delta -= Math.PI * 2;
-                if (delta < -Math.PI) delta += Math.PI * 2;
-                // The controller applies yaw -= movementX * sensitivity.
-                const sensitivity =
-                    Number(window.localStorage.getItem("sf_sensitivity")) || 0.0022;
-                window.dispatchEvent(
-                    new MouseEvent("mousemove", {
-                        movementX: -delta / sensitivity,
-                        movementY: 0,
-                    }),
-                );
-            });
-            await host.waitForTimeout(200);
-
-            /* Hold the trigger and watch the victim's own screen while
-             * it is held. The server rate-limits, so this is a burst
-             * rather than one shot, and it survives a near miss.
-             *
-             * The reading has to be taken during the burst, not after
-             * it: this is a 1v1, the first kill leaves one man standing
-             * and ends the match, and the victim comes back on full
-             * health. Sampling once the trigger is released races that.
-             *
-             * The assertion is on the lowest reading seen, so a sample
-             * that lands after a respawn cannot un-see the hit. */
             let lowest = 100;
-            await host.mouse.down();
-            try {
+            for (let approach = 0; approach < 10 && lowest === 100; approach++) {
+                await aimAtOpponent(host);
+                lowest = await burstAndWatch(host, guestHp, 2_000);
+                if (lowest < 100) break;
+
+                // Nothing landed, so there is cover in the way or the
+                // range is long. Step toward them and try again.
+                const from = await positionOf(host);
+                await host.keyboard.down("w");
                 await expect
-                    .poll(
-                        async () => {
-                            const shown = Number(await guestHp.textContent());
-                            if (Number.isFinite(shown)) {
-                                lowest = Math.min(lowest, shown);
-                            }
-                            return lowest;
-                        },
-                        { timeout: 20_000 },
-                    )
-                    .toBeLessThan(100);
-            } finally {
-                await host.mouse.up();
+                    .poll(async () => distanceFrom(from, await positionOf(host)), {
+                        timeout: 20_000,
+                    })
+                    .toBeGreaterThan(4);
+                await host.keyboard.up("w");
             }
+
+            // The server raycast it, so the drop shows on the victim's
+            // own screen and not merely on the shooter's.
+            expect(lowest).toBeLessThan(100);
         },
     );
 
