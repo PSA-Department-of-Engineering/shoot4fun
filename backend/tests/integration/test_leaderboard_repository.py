@@ -12,17 +12,19 @@ from __future__ import annotations
 
 import os
 import uuid
+from typing import TYPE_CHECKING
 
-import asyncpg
 import pytest
 import pytest_intent
 
 from shoot4fun_backend.adapters.outbound.memory.in_memory_leaderboard_repository import (
     InMemoryLeaderboardRepository,
 )
-from shoot4fun_backend.adapters.outbound.postgres.postgres_leaderboard_repository import (
-    PostgresLeaderboardRepository,
-)
+
+if TYPE_CHECKING:
+    from shoot4fun_backend.adapters.outbound.postgres.postgres_leaderboard_repository import (
+        PostgresLeaderboardRepository,
+    )
 
 PG_DSN = os.environ.get("TEST_DATABASE_URL")
 
@@ -31,6 +33,14 @@ PG_DSN = os.environ.get("TEST_DATABASE_URL")
 async def pg_repo() -> PostgresLeaderboardRepository:
     if not PG_DSN:
         pytest.skip("TEST_DATABASE_URL not set; postgres leaderboard test skipped")
+    # The driver is an optional extra, imported where it is used so a
+    # machine without it still attests the in-memory contracts below
+    # instead of failing collection for the whole module.
+    asyncpg = pytest.importorskip("asyncpg", reason="asyncpg not installed")
+    from shoot4fun_backend.adapters.outbound.postgres.postgres_leaderboard_repository import (
+        PostgresLeaderboardRepository,
+    )
+
     dsn = PG_DSN
     repo = PostgresLeaderboardRepository(dsn)
     await repo.connect()

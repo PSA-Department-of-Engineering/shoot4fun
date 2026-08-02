@@ -12,13 +12,13 @@ import pytest_intent
 from shoot4fun_backend.domain.exceptions.invalid_state_transition_error import (
     InvalidStateTransitionError,
 )
+from shoot4fun_backend.domain.model.input_frame import InputFrame
 from shoot4fun_backend.domain.model.match_room import ROOM_CAPACITY, MatchRoom
 from shoot4fun_backend.domain.model.match_state import MatchState
 from shoot4fun_backend.domain.model.match_state_machine import (
     ALLOWED_TRANSITIONS,
     MatchStateMachine,
 )
-from shoot4fun_backend.domain.model.vec3 import Vec3
 
 
 class TestMatchStateMachine:
@@ -71,7 +71,8 @@ class TestMatchStateMachine:
         room = MatchRoom.new()
         p = room.add_player("alice")
         before = p.position
-        room.apply_input(p.id, Vec3(1.0, 0.0, 0.0), (0.0, 0.0))
+        room.advance(1.0 / 60.0)
+        room.apply_input(p.id, InputFrame(seq=1, dt=1.0 / 60.0, forward=True))
         assert p.position == before
 
     @pytest_intent.intent("INT-011")

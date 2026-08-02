@@ -1,6 +1,6 @@
 # ADR 0001: WebSocket server-authoritative match (ARCH-001)
 
-- **Status:** Accepted
+- **Status:** Superseded by `ADR-0003`
 - **Date:** 2026-07-28
 - **Decision drivers:** `ARCH-001` (the cheat-resistance decision
   the proposal priced; high confidence, medium impact, maps to
