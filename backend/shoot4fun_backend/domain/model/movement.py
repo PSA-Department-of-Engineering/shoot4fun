@@ -3,9 +3,10 @@
 This is the one piece of simulation that exists twice, once here and
 once in the client's TypeScript, so the client can predict its own
 motion without waiting for the server (`ADR-0004`). The duplication is
-deliberate and is held in agreement mechanically: `tests/fixtures/
-movement_trace.json` is generated from this module and replayed by both
-suites, so a divergence fails both builds at the first differing step.
+deliberate and is held in agreement mechanically:
+`shared/movement_trace.json` is generated from this module and replayed
+by both suites, so a divergence fails both builds at the first differing
+step.
 
 Everything about this module serves that contract:
 
