@@ -1,60 +1,92 @@
 /* WebSocket match client.
- * Talks to /ws/match/{roomId}; emits parsed ServerMessage events. The
- * connection is opened by `connect(roomId, playerName)`, the input
- * loop is driven by `sendInput(...)`, and the lifecycle events (hello,
- * state, results) are dispatched to the registered handlers.
+ *
+ * Opens /ws/match/{roomId}, sends intent, and dispatches parsed server
+ * messages to subscribers. It holds no game state of its own: the scene
+ * owns prediction, the buffer owns interpolation, and this owns the
+ * socket.
  */
 
-import type { ClientMessage, ServerMessage } from "./protocol";
+import type { ClientMessage, InputWire, ServerMessage } from "./protocol";
 
 type Handler = (msg: ServerMessage) => void;
+type StatusHandler = (status: ConnectionStatus) => void;
+
+export type ConnectionStatus = "connecting" | "open" | "closed";
 
 export class MatchClient {
     private ws: WebSocket | null = null;
-    private handlers: Set<Handler> = new Set();
+    private handlers = new Set<Handler>();
+    private statusHandlers = new Set<StatusHandler>();
     private connected: Promise<void> | null = null;
-    private rejectConnected: ((err: Error) => void) | null = null;
-    private closed = false;
+    private closedByUs = false;
+    private latencyMs = 0;
 
-    constructor(private readonly roomId: string, private readonly playerName: string) {}
+    constructor(
+        private readonly roomId: string,
+        private readonly playerName: string,
+    ) {}
 
-    on(h: Handler): () => void {
-        this.handlers.add(h);
-        return () => this.handlers.delete(h);
+    on(handler: Handler): () => void {
+        this.handlers.add(handler);
+        return () => this.handlers.delete(handler);
+    }
+
+    onStatus(handler: StatusHandler): () => void {
+        this.statusHandlers.add(handler);
+        return () => this.statusHandlers.delete(handler);
+    }
+
+    /** Round-trip time in milliseconds, from the last ping answered. */
+    latency(): number {
+        return this.latencyMs;
     }
 
     async connect(): Promise<void> {
         if (this.connected) return this.connected;
         this.connected = new Promise<void>((resolve, reject) => {
-            this.rejectConnected = reject;
             const proto = window.location.protocol === "https:" ? "wss" : "ws";
-            const host = window.location.host;
-            const url = `${proto}://${host}/ws/match/${this.roomId}`;
+            const url = `${proto}://${window.location.host}/ws/match/${this.roomId}`;
+            let settled = false;
             const ws = new WebSocket(url);
             this.ws = ws;
+            this.emitStatus("connecting");
+
             ws.onopen = () => {
+                settled = true;
                 this.send({ type: "hello", name: this.playerName });
+                this.emitStatus("open");
                 resolve();
             };
-            ws.onmessage = (ev) => {
+            ws.onmessage = (event) => {
+                let data: ServerMessage;
                 try {
-                    const data = JSON.parse(ev.data) as ServerMessage;
-                    for (const h of this.handlers) h(data);
+                    data = JSON.parse(event.data) as ServerMessage;
                 } catch {
-                    /* ignore malformed */
+                    return;
                 }
+                if (data.type === "pong") {
+                    this.latencyMs = Math.max(0, performance.now() - data.t);
+                    return;
+                }
+                for (const handler of this.handlers) handler(data);
             };
             ws.onerror = () => {
-                if (this.rejectConnected) this.rejectConnected(new Error("ws error"));
+                if (settled) return;
+                settled = true;
+                reject(new Error("could not reach the match server"));
             };
-            ws.onclose = (ev) => {
-                if (this.closed) return;
-                if (this.rejectConnected) {
-                    this.rejectConnected(new Error(`ws closed: ${ev.code} ${ev.reason}`));
-                }
+            ws.onclose = (event) => {
+                this.emitStatus("closed");
+                if (this.closedByUs || settled) return;
+                settled = true;
+                reject(new Error(`connection closed: ${event.code} ${event.reason}`));
             };
         });
         return this.connected;
+    }
+
+    private emitStatus(status: ConnectionStatus): void {
+        for (const handler of this.statusHandlers) handler(status);
     }
 
     private send(msg: ClientMessage): void {
@@ -62,36 +94,42 @@ export class MatchClient {
         this.ws.send(JSON.stringify(msg));
     }
 
+    sendInput(frame: Omit<InputWire, "type">): void {
+        this.send({ type: "input", ...frame });
+    }
+
     setReady(ready: boolean): void {
         this.send({ type: "set_ready", ready });
+    }
+
+    selectMap(arena: string): void {
+        this.send({ type: "select_map", arena });
     }
 
     startMatch(): void {
         this.send({ type: "start_match" });
     }
 
-    sendInput(move: [number, number, number], look: [number, number]): void {
-        this.send({ type: "input", move, look });
-    }
-
-    fire(target?: string, weapon?: string): void {
-        this.send({ type: "fire", target, weapon });
+    rematch(): void {
+        this.send({ type: "rematch" });
     }
 
     switchWeapon(weapon: string): void {
         this.send({ type: "switch_weapon", weapon });
     }
 
-    rematch(): void {
-        this.send({ type: "rematch" });
+    reload(): void {
+        this.send({ type: "reload" });
+    }
+
+    ping(): void {
+        this.send({ type: "ping", t: performance.now() });
     }
 
     close(): void {
-        this.closed = true;
-        if (this.ws) {
-            this.ws.close();
-            this.ws = null;
-        }
+        this.closedByUs = true;
+        this.ws?.close();
+        this.ws = null;
         this.connected = null;
     }
 }

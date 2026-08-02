@@ -1,152 +1,225 @@
-/* Pointer-lock + WASD input.
- * The local player's camera drives the yaw/pitch; the move vector
- * comes from WASD. The contract:
- * - onInput is called once per tick with the latest move + look.
- * - pointer-lock failure degrades to keyboard-look (arrow keys).
- * - the controller never sends a position; only the move vector
- *   (the server is authoritative).
+/* Mouse and keyboard input for a first-person shooter (ADR-0002).
+ *
+ * Two things matter here and both were wrong before.
+ *
+ * First, this is a *state holder*, not a loop. It records what is
+ * currently held and how far the mouse has moved; the render loop
+ * samples it once per frame. Owning its own `requestAnimationFrame`
+ * would put input on a second clock, decoupled from rendering and from
+ * the frame's delta time.
+ *
+ * Second, look is applied locally and immediately. Yaw and pitch never
+ * make a round trip before the camera turns: the server is told where
+ * the player looked, and decides what that look hit, but it is never
+ * asked for permission to turn the camera.
+ *
+ * Pointer lock is the browser's gate on relative mouse deltas, so it is
+ * mandatory for mouse-look and can only be requested from a real user
+ * gesture. It can be refused, and the user can drop it at any time with
+ * Escape, so the lock has a lifecycle with listeners rather than being
+ * assumed once and forgotten.
  */
 
-export interface InputFrame {
-    move: [number, number, number];
-    look: [number, number];
+export interface InputSnapshot {
+    forward: boolean;
+    back: boolean;
+    left: boolean;
+    right: boolean;
     fire: boolean;
-    weaponSwitch: string | null;
+    yaw: number;
+    pitch: number;
 }
 
-export interface InputController {
-    /** Subscribe to per-tick input frames. Returns an unsubscribe fn. */
-    onTick(cb: (frame: InputFrame) => void): () => void;
-    /** Request pointer-lock on the given element. */
-    requestPointerLock(target: HTMLElement): Promise<boolean>;
-    /** True if pointer-lock is active. */
-    isPointerLocked(): boolean;
-    /** True if the user has disabled mouse-look (set in settings). */
-    mouseLookEnabled(): boolean;
-    /** Manually trigger a fire this tick (used by mouse click). */
-    triggerFire(): void;
-    /** Manually trigger a weapon switch. */
-    triggerSwitch(weapon: string): void;
-    /** Get the latest accumulated yaw/pitch (debug / e2e inspection). */
-    getYawPitch(): { yaw: number; pitch: number };
-    /** Force the controller to listen for input without pointer-lock.
-     * Used in offline / test mode where no real pointer-lock is
-     * available. */
-    setActive(v: boolean): void;
-}
+export type LockListener = (locked: boolean) => void;
 
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
-const MOUSE_SENSITIVITY_DEFAULT = 0.0025;
+const DEFAULT_SENSITIVITY = 0.0022;
+const SENSITIVITY_KEY = "sf_sensitivity";
 
-export function createInputController(opts?: {
-    mouseSensitivity?: number;
-}): InputController {
-    const sens = opts?.mouseSensitivity ?? MOUSE_SENSITIVITY_DEFAULT;
-    const keys = new Set<string>();
-    let yaw = 0;
-    let pitch = 0;
-    let pendingFire = false;
-    let pendingSwitch: string | null = null;
-    const tickHandlers: Set<(f: InputFrame) => void> = new Set();
-    let pointerLockedEl: Element | null = null;
-    let active = false;
+/* Movement keys by physical position (KeyboardEvent.code), so WASD works
+ * on AZERTY and Dvorak without rebinding. Actions are read from `key`,
+ * which is what a player would name them by. */
+const MOVEMENT_BY_CODE: Record<string, keyof Pick<
+    InputSnapshot,
+    "forward" | "back" | "left" | "right"
+>> = {
+    KeyW: "forward",
+    ArrowUp: "forward",
+    KeyS: "back",
+    ArrowDown: "back",
+    KeyA: "left",
+    ArrowLeft: "left",
+    KeyD: "right",
+    ArrowRight: "right",
+};
 
-    const onKeyDown = (e: KeyboardEvent) => {
-        const k = e.key.toLowerCase();
-        keys.add(k);
-        if (k === "1" || k === "2") {
-            pendingSwitch = k;
-        }
-        if (k === "m" || k === "s") {
-            window.dispatchEvent(
-                new CustomEvent("sf:toggle-mute", { detail: { key: k } }),
-            );
-        }
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-        keys.delete(e.key.toLowerCase());
-    };
-    const onMouseMove = (e: MouseEvent) => {
-        // Mouse-look works when pointer-lock is active AND when the
-        // controller is "active" (set by `setActive(true)`, used in
-        // offline / test mode). The pointer-lock guard stays for the
-        // production path.
-        if (!pointerLockedEl && !active) return;
-        yaw -= e.movementX * sens;
-        pitch -= e.movementY * sens;
-        if (pitch > PITCH_LIMIT) pitch = PITCH_LIMIT;
-        if (pitch < -PITCH_LIMIT) pitch = -PITCH_LIMIT;
-    };
-    const onMouseDown = (e: MouseEvent) => {
-        if (e.button === 0) pendingFire = true;
-    };
-    const onPointerLockChange = () => {
-        pointerLockedEl = document.pointerLockElement;
-    };
+export class InputController {
+    private held = new Set<string>();
+    private firing = false;
+    private yaw = 0;
+    private pitch = 0;
+    private sensitivity = readSensitivity();
+    private target: HTMLElement | null = null;
+    private locked = false;
+    private lockListeners = new Set<LockListener>();
+    private pendingReload = false;
+    private pendingWeapon: string | null = null;
 
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("pointerlockchange", onPointerLockChange);
-
-    function tickLoop(): void {
-        const move: [number, number, number] = [0, 0, 0];
-        if (keys.has("w")) move[2] -= 1;
-        if (keys.has("s")) move[2] += 1;
-        if (keys.has("a")) move[0] -= 1;
-        if (keys.has("d")) move[0] += 1;
-        const len = Math.hypot(move[0], move[2]);
-        if (len > 0) {
-            move[0] /= len;
-            move[2] /= len;
-        }
-        const frame: InputFrame = {
-            move,
-            look: [yaw, pitch],
-            fire: pendingFire,
-            weaponSwitch: pendingSwitch,
-        };
-        pendingFire = false;
-        pendingSwitch = null;
-        for (const h of tickHandlers) h(frame);
-        requestAnimationFrame(tickLoop);
+    attach(target: HTMLElement): void {
+        this.target = target;
+        window.addEventListener("keydown", this.onKeyDown);
+        window.addEventListener("keyup", this.onKeyUp);
+        window.addEventListener("blur", this.onBlur);
+        window.addEventListener("mousemove", this.onMouseMove);
+        window.addEventListener("mousedown", this.onMouseDown);
+        window.addEventListener("mouseup", this.onMouseUp);
+        document.addEventListener("pointerlockchange", this.onLockChange);
     }
-    requestAnimationFrame(tickLoop);
 
-    return {
-        onTick(cb) {
-            tickHandlers.add(cb);
-            return () => tickHandlers.delete(cb);
-        },
-        async requestPointerLock(target: HTMLElement) {
-            try {
-                const r = target.requestPointerLock();
-                if (r instanceof Promise) await r;
-                return document.pointerLockElement === target;
-            } catch {
-                return false;
-            }
-        },
-        isPointerLocked() {
-            return pointerLockedEl !== null;
-        },
-        mouseLookEnabled() {
-            return (
-                window.localStorage.getItem("sf_mouse_look") ?? "1"
-            ) === "1";
-        },
-        triggerFire() {
-            pendingFire = true;
-        },
-        triggerSwitch(weapon: string) {
-            pendingSwitch = weapon;
-        },
-        getYawPitch() {
-            return { yaw, pitch };
-        },
-        setActive(v: boolean) {
-            active = v;
-        },
+    dispose(): void {
+        window.removeEventListener("keydown", this.onKeyDown);
+        window.removeEventListener("keyup", this.onKeyUp);
+        window.removeEventListener("blur", this.onBlur);
+        window.removeEventListener("mousemove", this.onMouseMove);
+        window.removeEventListener("mousedown", this.onMouseDown);
+        window.removeEventListener("mouseup", this.onMouseUp);
+        document.removeEventListener("pointerlockchange", this.onLockChange);
+        this.lockListeners.clear();
+        this.held.clear();
+        this.target = null;
+    }
+
+    /** Ask for pointer lock. Must be called from a user gesture. */
+    async requestLock(): Promise<boolean> {
+        const target = this.target;
+        if (!target) return false;
+        try {
+            const result = target.requestPointerLock();
+            if (result instanceof Promise) await result;
+        } catch {
+            // Refused (no gesture, or the browser is rate-limiting a
+            // re-request straight after an Escape). The caller keeps the
+            // click-to-play overlay up and the player tries again.
+            return false;
+        }
+        return document.pointerLockElement === target;
+    }
+
+    releaseLock(): void {
+        if (document.pointerLockElement) document.exitPointerLock();
+    }
+
+    isLocked(): boolean {
+        return this.locked;
+    }
+
+    onLockedChange(listener: LockListener): () => void {
+        this.lockListeners.add(listener);
+        return () => this.lockListeners.delete(listener);
+    }
+
+    setSensitivity(value: number): void {
+        if (Number.isFinite(value) && value > 0) this.sensitivity = value;
+    }
+
+    /** The current intent. Sampled once per rendered frame. */
+    sample(): InputSnapshot {
+        return {
+            forward: this.isHeld("forward"),
+            back: this.isHeld("back"),
+            left: this.isHeld("left"),
+            right: this.isHeld("right"),
+            fire: this.firing,
+            yaw: this.yaw,
+            pitch: this.pitch,
+        };
+    }
+
+    /** Drain a queued reload request, if the player pressed R. */
+    takeReload(): boolean {
+        const pending = this.pendingReload;
+        this.pendingReload = false;
+        return pending;
+    }
+
+    /** Drain a queued weapon switch, if the player pressed 1 or 2. */
+    takeWeaponSwitch(): string | null {
+        const pending = this.pendingWeapon;
+        this.pendingWeapon = null;
+        return pending;
+    }
+
+    /** Aim the camera directly. Used to adopt the server's spawn facing. */
+    setLook(yaw: number, pitch: number): void {
+        this.yaw = yaw;
+        this.pitch = clampPitch(pitch);
+    }
+
+    private isHeld(action: string): boolean {
+        return this.held.has(action);
+    }
+
+    private onKeyDown = (event: KeyboardEvent): void => {
+        const movement = MOVEMENT_BY_CODE[event.code];
+        if (movement) {
+            this.held.add(movement);
+            // Arrow keys scroll the page otherwise, which drags the
+            // canvas out from under a player who never left it.
+            event.preventDefault();
+            return;
+        }
+        if (event.repeat) return;
+        const key = event.key.toLowerCase();
+        if (key === "r") this.pendingReload = true;
+        else if (key === "1") this.pendingWeapon = "rifle";
+        else if (key === "2") this.pendingWeapon = "smg";
     };
+
+    private onKeyUp = (event: KeyboardEvent): void => {
+        const movement = MOVEMENT_BY_CODE[event.code];
+        if (movement) this.held.delete(movement);
+    };
+
+    /* Losing focus mid-stride leaves a key logically held forever,
+     * because the keyup lands on whatever took focus. */
+    private onBlur = (): void => {
+        this.held.clear();
+        this.firing = false;
+    };
+
+    private onMouseMove = (event: MouseEvent): void => {
+        if (!this.locked) return;
+        this.yaw -= event.movementX * this.sensitivity;
+        this.pitch = clampPitch(this.pitch - event.movementY * this.sensitivity);
+    };
+
+    private onMouseDown = (event: MouseEvent): void => {
+        if (event.button === 0 && this.locked) this.firing = true;
+    };
+
+    private onMouseUp = (event: MouseEvent): void => {
+        if (event.button === 0) this.firing = false;
+    };
+
+    private onLockChange = (): void => {
+        this.locked = document.pointerLockElement === this.target;
+        if (!this.locked) {
+            // Escape drops the lock. Everything held goes with it, so
+            // the player does not walk into a wall while reading a menu.
+            this.held.clear();
+            this.firing = false;
+        }
+        for (const listener of this.lockListeners) listener(this.locked);
+    };
+}
+
+function clampPitch(pitch: number): number {
+    if (pitch > PITCH_LIMIT) return PITCH_LIMIT;
+    if (pitch < -PITCH_LIMIT) return -PITCH_LIMIT;
+    return pitch;
+}
+
+function readSensitivity(): number {
+    const stored = Number(window.localStorage.getItem(SENSITIVITY_KEY));
+    return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_SENSITIVITY;
 }

@@ -59,6 +59,10 @@ export function hslToHex(hsl: string): string {
 export const SCENE_COLORS = {
     arenaGround: hslToHex("35 18% 78%"),
     arenaCover: hslToHex("200 8% 38%"),
+    // The boundary wall reads as the same material as cover, a shade
+    // lighter, so the arena edge is legible without competing with the
+    // cover a player is reading for sightlines.
+    arenaWall: hslToHex("200 8% 52%"),
     arenaSky: hslToHex("210 30% 88%"),
     muzzleFlash: hslToHex("50 100% 70%"),
     hitIndicator: hslToHex("50 100% 55%"),

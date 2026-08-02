@@ -12,7 +12,7 @@ test('the scene mounts, renders a first frame, and logs no errors', async ({ pag
         errors.push(text);
     });
 
-    await page.goto('/?offline=1');
+    await page.goto('/');
 
     // data-scene-ready flips on the first rendered frame (src/scene/SceneApp.ts);
     // reaching it proves the WebGL context and the animation loop are alive.

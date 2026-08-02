@@ -10,7 +10,7 @@ import { expect, test } from '@playwright/test';
 const LOCKED_FONT_FACES = ['Russo One', 'Bungee', 'Inter', 'JetBrains Mono'];
 
 test('all four locked fonts are self-hosted via @font-face', async ({ page }) => {
-    await page.goto('/?offline=1');
+    await page.goto('/');
     const families = await page.evaluate(() => {
         const seen = new Set<string>();
         for (const sheet of Array.from(document.styleSheets)) {
@@ -35,7 +35,7 @@ test('all four locked fonts are self-hosted via @font-face', async ({ page }) =>
 });
 
 test('the Wordmark role renders at the locked family and weight', async ({ page }) => {
-    await page.goto('/?offline=1');
+    await page.goto('/');
     // Same shape as the real markup (main.ts's click-to-play overlay,
     // Surface.ts's results banner): an h1.wordmark inside .card.
     const style = await page.evaluate(() => {
@@ -62,7 +62,7 @@ test('the Wordmark role renders at the locked family and weight', async ({ page 
 });
 
 test('the HUD display numbers render in the locked Bungee face at the locked size', async ({ page }) => {
-    await page.goto('/?offline=1');
+    await page.goto('/');
     // The HUD mounts unconditionally (src/ui/Hud.ts), so its real
     // .hud-number elements are in the DOM without a live match.
     for (const selector of ['[data-ammo]', '[data-health-number]']) {
@@ -79,7 +79,7 @@ test('the HUD display numbers render in the locked Bungee face at the locked siz
 });
 
 test('room code and keybind-hint text render in the locked JetBrains Mono face', async ({ page }) => {
-    await page.goto('/?offline=1');
+    await page.goto('/');
     const fontFamily = await page.evaluate(() => {
         const probe = document.createElement('span');
         probe.style.fontFamily = 'var(--font-mono)';

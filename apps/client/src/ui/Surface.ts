@@ -25,7 +25,7 @@ export class Surface {
         }
         this.current = view;
         this.host.innerHTML = render(view, ctx);
-        wireUp(view, ctx);
+        wireUp(this, view, ctx);
     }
 
     hide(): void {
@@ -38,7 +38,7 @@ export class Surface {
         const root = this.host.querySelector(".card");
         if (!root) return;
         root.innerHTML = renderBody(view, ctx);
-        wireUp(view, ctx);
+        wireUp(this, view, ctx);
     }
 }
 
@@ -158,7 +158,7 @@ function renderLeaderboard(_ctx: SurfaceContext): string {
     `;
 }
 
-function wireUp(view: ViewKind, ctx: SurfaceContext): void {
+function wireUp(surface: Surface, view: ViewKind, ctx: SurfaceContext): void {
     if (view === "lobby") {
         bindClick(ctx, "[data-ready]", () => {
             const me = ctx.room?.players.find((p) => p.id === ctx.localPlayerId);
@@ -167,16 +167,16 @@ function wireUp(view: ViewKind, ctx: SurfaceContext): void {
         bindClick(ctx, "[data-start]", () => ctx.client.startMatch());
         const mapSel = document.querySelector("[data-map]") as HTMLSelectElement | null;
         if (mapSel) {
+            // The server owns the arena, so choosing one is a request to
+            // the room, not a local preference. Everyone's lobby updates
+            // from the snapshot the server sends back.
             mapSel.addEventListener("change", () => {
-                // Map change is local-only; server picks arena by id at start
+                ctx.client.selectMap(mapSel.value);
             });
         }
     } else if (view === "results") {
         bindClick(ctx, "[data-rematch]", () => ctx.client.rematch());
-        bindClick(ctx, "[data-leaderboard]", () => {
-            ctx.onClose();
-            // Surface switches to leaderboard via parent
-        });
+        bindClick(ctx, "[data-leaderboard]", () => surface.show("leaderboard", ctx));
         bindClick(ctx, "[data-close]", () => ctx.onClose());
     } else if (view === "settings") {
         const master = document.querySelector("[data-master]") as HTMLInputElement | null;
@@ -201,8 +201,9 @@ function wireUp(view: ViewKind, ctx: SurfaceContext): void {
         }
         bindClick(ctx, "[data-close]", () => ctx.onClose());
     } else if (view === "leaderboard") {
-        bindClick(ctx, "[data-close]", () => ctx.onClose());
-        loadLeaderboard();
+        // Reached from the results screen, so Back returns there.
+        bindClick(ctx, "[data-close]", () => surface.show("results", ctx));
+        void loadLeaderboard(ctx.room?.arena.id ?? "sandbox");
     }
 }
 
@@ -211,12 +212,12 @@ function bindClick(_ctx: SurfaceContext, selector: string, fn: () => void): void
     if (el) el.addEventListener("click", fn);
 }
 
-async function loadLeaderboard(): Promise<void> {
+async function loadLeaderboard(arenaId: string): Promise<void> {
     const body = document.querySelector("[data-leaderboard-body]");
     if (!body) return;
-    body.innerHTML = "<p class='muted-text'>Loading…</p>";
+    body.innerHTML = "<p class='muted-text'>Loading...</p>";
     try {
-        const res = await fetch("/api/leaderboard/sandbox");
+        const res = await fetch(`/api/leaderboard/${encodeURIComponent(arenaId)}`);
         if (!res.ok) {
             body.innerHTML = "<p class='muted-text'>No scores yet.</p>";
             return;

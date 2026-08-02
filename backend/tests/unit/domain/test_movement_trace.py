@@ -68,7 +68,11 @@ def test_movement_matches_the_shared_trace(case: dict) -> None:
     epsilon = float(TRACE["epsilon"])
     position = _vec(case["start"])
 
-    for index, (raw, want) in enumerate(zip(case["frames"], case["expected"])):
+    # strict: a case whose frames and expectations differ in length is a
+    # corrupt fixture, and silently replaying the shorter one would pass.
+    for index, (raw, want) in enumerate(
+        zip(case["frames"], case["expected"], strict=True)
+    ):
         position = step(
             position,
             InputFrame(

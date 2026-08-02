@@ -335,6 +335,62 @@ body {
     color: hsl(var(--muted-foreground));
 }
 
+/* The pointer-lock gate. Pointer lock is only grantable during a real
+ * user gesture, so this is the surface that carries the gesture: it is
+ * up whenever a running match does not hold the mouse, and taking the
+ * lock is what dismisses it. It sits below the lobby and results
+ * surfaces, which are menus the player is meant to use with a cursor. */
+.gate {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: hsl(var(--background) / 0.82);
+    backdrop-filter: blur(3px);
+    cursor: pointer;
+    z-index: 15;
+}
+
+/* Confirmation that one of our own shots landed. Read at the centre of
+ * the screen in the moment after firing, so it is shape and timing that
+ * carry it, not colour alone. */
+.hud-hitmarker {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 34px;
+    height: 34px;
+    transform: translate(-50%, -50%) scale(0.85);
+    opacity: 0;
+    stroke: hsl(var(--foreground));
+    pointer-events: none;
+    transition:
+        opacity 90ms ease-out,
+        transform 90ms ease-out;
+}
+
+.hud-hitmarker[data-visible="true"] {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.hud-hitmarker[data-kind="headshot"] {
+    stroke: hsl(var(--accent));
+}
+
+.hud-hitmarker[data-kind="kill"] {
+    stroke: hsl(var(--destructive));
+    transform: translate(-50%, -50%) scale(1.25) rotate(45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hud-hitmarker {
+        transition: none;
+    }
+}
+
 .toast {
     position: fixed;
     top: 1rem;
