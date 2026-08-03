@@ -77,6 +77,11 @@ export class CharacterLibrary {
         if (!this.source) return null;
         const root = cloneRigged(this.source);
         root.scale.setScalar(this.modelScale);
+        // The asset was authored facing +Z (the Mixamo convention), while
+        // the game's yaw faces -Z (`movement`): an unrotated clone shows
+        // its back to whoever it walks toward. Every instance turns a
+        // half-turn so the face leads the motion.
+        root.rotation.y = Math.PI;
 
         const materials: THREE.MeshStandardMaterial[] = [];
         root.traverse((node) => {
