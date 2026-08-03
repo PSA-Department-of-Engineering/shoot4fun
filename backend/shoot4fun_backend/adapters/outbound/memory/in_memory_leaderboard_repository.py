@@ -24,7 +24,11 @@ class InMemoryLeaderboardRepository(LeaderboardRepository):
         return self._best.get(arena)
 
     async def upsert_if_higher(
-        self, arena: str, holder_name: str, score: int
+        self,
+        arena: str,
+        holder_name: str,
+        score: int,
+        user_id: str | None = None,
     ) -> LeaderboardEntry:
         current = self._best.get(arena)
         if current is None or score > current.best_score:
@@ -33,6 +37,7 @@ class InMemoryLeaderboardRepository(LeaderboardRepository):
                 best_score=score,
                 holder_name=holder_name,
                 updated_at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+                user_id=user_id,
             )
             self._best[arena] = entry
             return entry

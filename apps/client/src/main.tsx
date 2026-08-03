@@ -20,6 +20,7 @@ import { createRoot } from "react-dom/client";
 
 import App from "./app/App";
 import { getGameRuntime } from "./app/GameRuntime";
+import { useProfile } from "./ui/viewmodels/profile";
 import { useRoom } from "./ui/viewmodels/room";
 import { useSession } from "./ui/viewmodels/session";
 import { useSettings } from "./ui/viewmodels/settings";
@@ -53,4 +54,5 @@ window.addEventListener("hashchange", () => useSession.getState().followUrl());
 createRoot(container).render(<App />);
 
 useSettings.getState().hydrate();
+void useProfile.getState().hydrate();
 useSession.getState().hydrate();

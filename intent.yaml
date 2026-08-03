@@ -271,3 +271,19 @@ INT-017:
     component: LeaderboardRepository
     type: contract
   criticality: medium
+
+# Issue #12. Attested by tests/integration/test_profile_repository.py
+# (the create/read/patch round trip, the refused second creation, the
+# unknown-username answer) and test_profile_api.py (the HTTP surface,
+# including a leaderboard score posted with a user_id coming back
+# carrying it).
+INT-018:
+  version: 1.0.0
+  status: active
+  statement: "A profile store holds one row per adopted username: display name, mouse sensitivity and master/SFX volume, created and patched over `POST/PATCH /api/users` and read over `GET /api/users/{username}`, with a second creation of an existing username refused. The per-arena leaderboard rows carry an optional reference to a profile, so a score can be attributed once login lands, while guest scores stay name-only."
+  rationale: "Issue #12: players had no durable identity - the name rode in `localStorage` and the leaderboard had nothing to attach a score to. The store is the pre-login plumbing: it must exist without forcing authentication, so the endpoints carry no auth and the client keeps its `localStorage` flow for guests. `POST /api/users` answers 409 on a taken username; leaderboard `user_id` is nullable and name-only for guests."
+  test:
+    scope: integration
+    component: UserProfile
+    type: contract
+  criticality: high

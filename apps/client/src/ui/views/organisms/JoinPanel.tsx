@@ -1,5 +1,15 @@
 import type { FormEvent } from "react";
+import { useEffect, useState } from "react";
 
+import {
+    selectIsAdopted,
+    selectProfileError,
+    selectProfileStatus,
+    selectUsername,
+    isUsernameValid,
+    useProfile,
+    USERNAME_MAX_LENGTH,
+} from "@/ui/viewmodels/profile";
 import {
     NAME_MAX_LENGTH,
     ROOM_CODE_LENGTH,
@@ -30,6 +40,20 @@ export const JoinPanel = () => {
     const createRoom = useSession((s) => s.createRoom);
     const joinRoom = useSession((s) => s.joinRoom);
 
+    const username = useProfile(selectUsername);
+    const profileStatus = useProfile(selectProfileStatus);
+    const profileError = useProfile(selectProfileError);
+    const isAdopted = useProfile(selectIsAdopted);
+    const adopt = useProfile((s) => s.adopt);
+    const forget = useProfile((s) => s.forget);
+
+    const [profileDraft, setProfileDraft] = useState("");
+
+    /* The field shows the adopted username once a profile is live. */
+    useEffect(() => {
+        if (username) setProfileDraft(username);
+    }, [username]);
+
     const busy = phase === "joining";
 
     const submit = (event: FormEvent) => {
@@ -48,6 +72,53 @@ export const JoinPanel = () => {
                     autoFocus
                     onChange={(event) => setPlayerName(event.target.value)}
                 />
+            </FormField>
+
+            <FormField
+                htmlFor="profile-username"
+                label="Profile username (optional)"
+                hint="Adopt a username to save your name and settings to your profile and bring them back on any machine."
+            >
+                {isAdopted ? (
+                    <p className="join__profile" data-profile-adopted>
+                        Synced to profile <strong>{username}</strong>{" "}
+                        <Button
+                            variant="ghost"
+                            onClick={() => {
+                                forget();
+                                setProfileDraft("");
+                            }}
+                            data-profile-forget
+                        >
+                            Forget
+                        </Button>
+                    </p>
+                ) : (
+                    <div className="join__profile-row">
+                        <TextField
+                            id="profile-username"
+                            value={profileDraft}
+                            maxLength={USERNAME_MAX_LENGTH}
+                            placeholder="Username"
+                            onChange={(event) => setProfileDraft(event.target.value)}
+                        />
+                        <Button
+                            disabled={
+                                !isUsernameValid(profileDraft) ||
+                                profileStatus === "loading"
+                            }
+                            onClick={() => void adopt(profileDraft)}
+                            data-profile-adopt
+                        >
+                            {profileStatus === "loading" ? "Adopting..." : "Adopt"}
+                        </Button>
+                    </div>
+                )}
+                {profileStatus === "error" && profileError ? (
+                    <p className="join__error" role="alert">
+                        {profileError}
+                    </p>
+                ) : null}
             </FormField>
 
             <Button

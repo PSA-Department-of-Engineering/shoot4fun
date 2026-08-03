@@ -819,6 +819,23 @@ body {
     font-size: 0.875rem;
 }
 
+.join__profile-row {
+    display: flex;
+    gap: var(--space-3);
+}
+
+.join__profile-row .input {
+    flex: 1;
+}
+
+.join__profile {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: 0;
+    font-size: 0.875rem;
+}
+
 .roster,
 .scoreboard,
 .map-grid {
@@ -911,6 +928,12 @@ body {
 .modal__actions {
     display: flex;
     justify-content: flex-end;
+}
+
+.modal__profile {
+    margin: 0;
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
 }
 
 .keybinds {

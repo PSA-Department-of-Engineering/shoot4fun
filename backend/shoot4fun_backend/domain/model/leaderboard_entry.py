@@ -12,3 +12,6 @@ class LeaderboardEntry:
     best_score: int
     holder_name: str
     updated_at: str
+    # The profile the score is attributable to once login lands (issue
+    # #12); `None` for a guest score, which is name-only.
+    user_id: str | None = None

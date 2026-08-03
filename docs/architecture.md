@@ -100,7 +100,8 @@ zero and nothing moves on screen.
 | Hitscan | `backend/.../domain/model/hitscan.py` | Ray versus cover boxes and player capsules, headshots. |
 | Input frame | `backend/.../domain/model/input_frame.py` | Parsing and coercing one client frame. |
 | Player | `backend/.../domain/model/player.py` | Health, ammunition, reload, weapon, simulation budget. |
-| Leaderboard | `backend/.../adapters/outbound/{memory,postgres}/` | Best score per arena, upsert-if-higher. |
+| Leaderboard | `backend/.../adapters/outbound/{memory,postgres}/` | Best score per arena, upsert-if-higher, optional profile attribution. |
+| Profile store | `backend/.../application/services/profile_service.py` + `adapters/outbound/{memory,postgres}/user_repository` | The `users` table (unique username + display name + the three preferences), the pre-login identity plumbing (issue #12). |
 | Scene | `apps/client/src/scene/SceneApp.ts` | Renderer, camera rig, arena meshes, avatars, frame loop. |
 | Prediction | `apps/client/src/sim/Predictor.ts` | Local position, pending frames, reconciliation. |
 | Interpolation | `apps/client/src/sim/SnapshotBuffer.ts` | Other players, sampled 100ms in the past. |
@@ -110,7 +111,7 @@ zero and nothing moves on screen.
 | Runtime boundary | `apps/client/src/app/GameRuntime.ts` | The one door between the imperative half (scene, socket, HUD) and React. Publishes plain data. |
 | HUD | `apps/client/src/ui/hud/Hud.ts` | Crosshair, health, ammo, score, hit feedback, respawn countdown. Written per snapshot, never through a component tree. |
 | Screens | `apps/client/src/ui/views/` | Entry, lobby, results, settings and the pointer-lock gate, as atoms through pages. |
-| Screen state | `apps/client/src/ui/viewmodels/` | Session, room, settings and leaderboard, as state/actions/model triples. |
+| Screen state | `apps/client/src/ui/viewmodels/` | Session, room, settings, leaderboard and profile, as state/actions/model triples. |
 
 ## The one duplicated routine
 
@@ -197,11 +198,18 @@ counter move in the playing state only.
 | `GET /api/health` | Liveness and version. |
 | `GET /api/arenas` | The arenas a room can be set to, with the lobby's display copy. The picker is built from this, so the client carries no list of maps. |
 | `GET /api/leaderboard/{arena}` | Best score for an arena, 404 when there is none. |
-| `POST /api/leaderboard/{arena}/score` | Upsert-if-higher, body `{holder_name, score}`. |
+| `POST /api/leaderboard/{arena}/score` | Upsert-if-higher, body `{holder_name, score}`, optional `user_id` attributing the score to a profile. |
+| `POST /api/users` | Adopt a username and create its profile (201, or 409 when the username is taken). |
+| `GET /api/users/{username}` | Read a profile, 404 when unknown. |
+| `PATCH /api/users/{username}` | Patch profile fields (display name, sensitivity, volumes), all optional. |
 
-`Container` selects the Postgres leaderboard when `DATABASE_URL` is set
-and the in-memory one otherwise, and starts the tick unless
-`DISABLE_TICK_LOOP=1`.
+`Container` selects the Postgres adapters when `DATABASE_URL` is set
+and the in-memory ones otherwise, and starts the tick unless
+`DISABLE_TICK_LOOP=1`. The `users` table owns the leaderboard's
+`user_id` foreign key, so the user repository connects before the
+leaderboard does. There is deliberately no authentication on the
+profile endpoints: the username is an adopted handle until the login
+work (a separate issue) lands, and guests never touch them.
 
 ## Brand and tokens
 
