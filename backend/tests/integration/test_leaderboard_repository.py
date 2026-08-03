@@ -42,6 +42,15 @@ async def pg_repo() -> PostgresLeaderboardRepository:
     )
 
     dsn = PG_DSN
+    # The leaderboard's `user_id` column references `users(id)`, which
+    # the user repository creates; connect it first so the ALTER TABLE
+    # in the leaderboard's connect() has a table to reference.
+    from shoot4fun_backend.adapters.outbound.postgres.postgres_user_repository import (
+        PostgresUserRepository,
+    )
+
+    users = PostgresUserRepository(dsn)
+    await users.connect()
     repo = PostgresLeaderboardRepository(dsn)
     await repo.connect()
     try:
@@ -50,9 +59,11 @@ async def pg_repo() -> PostgresLeaderboardRepository:
         admin = await asyncpg.connect(dsn)
         try:
             await admin.execute("DELETE FROM leaderboard WHERE arena LIKE 'lb_test_%'")
+            await admin.execute("DELETE FROM users WHERE username LIKE 'lb_test_%'")
         finally:
             await admin.close()
         await repo.close()
+        await users.close()
 
 
 class TestLeaderboardRepository:
@@ -105,3 +116,33 @@ class TestLeaderboardRepository:
         assert best2 is not None
         assert best2.best_score == 150
         assert best2.holder_name == "carol"
+
+    @pytest_intent.intent("INT-018")
+    @pytest.mark.skipif(not PG_DSN, reason="postgres not configured")
+    async def test_postgres_score_attribution_round_trip(
+        self, pg_repo: PostgresLeaderboardRepository
+    ) -> None:
+        from shoot4fun_backend.adapters.outbound.postgres.postgres_user_repository import (
+            PostgresUserRepository,
+        )
+
+        username = f"lb_test_{uuid.uuid4().hex[:8]}"
+        users = PostgresUserRepository(PG_DSN)
+        await users.connect()
+        try:
+            profile = await users.create(username, "Attributed", 0.0022, 0.7, 0.8)
+            arena = f"lb_test_{uuid.uuid4().hex[:8]}"
+            await pg_repo.upsert_if_higher(arena, "Attributed", 60, user_id=profile.id)
+            best = await pg_repo.get_best(arena)
+            assert best is not None
+            assert best.user_id == profile.id
+
+            # A guest score on the same arena keeps the higher entry but
+            # the attribution that came with it.
+            await pg_repo.upsert_if_higher(arena, "Guest", 30)
+            best2 = await pg_repo.get_best(arena)
+            assert best2 is not None
+            assert best2.user_id == profile.id
+            assert best2.holder_name == "Attributed"
+        finally:
+            await users.close()

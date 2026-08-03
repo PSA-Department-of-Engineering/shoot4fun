@@ -341,9 +341,13 @@ class MatchService(MatchServicePort):
         return _entry_to_dict(entry)
 
     async def record_match_score(
-        self, arena: str, holder_name: str, score: int
+        self,
+        arena: str,
+        holder_name: str,
+        score: int,
+        user_id: str | None = None,
     ) -> dict:
-        entry = await self.leaderboard.upsert_if_higher(arena, holder_name, score)
+        entry = await self.leaderboard.upsert_if_higher(arena, holder_name, score, user_id)
         return _entry_to_dict(entry)
 
 
@@ -352,6 +356,7 @@ def _entry_to_dict(entry: object) -> dict:
         "arena": entry.arena,  # type: ignore[attr-defined]
         "best_score": entry.best_score,  # type: ignore[attr-defined]
         "holder_name": entry.holder_name,  # type: ignore[attr-defined]
+        "user_id": entry.user_id,  # type: ignore[attr-defined]
         "updated_at": entry.updated_at,  # type: ignore[attr-defined]
     }
 

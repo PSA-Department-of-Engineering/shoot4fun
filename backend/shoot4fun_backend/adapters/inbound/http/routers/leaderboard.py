@@ -5,7 +5,9 @@ Two endpoints:
 * `GET /api/leaderboard/{arena}` - return the best score for the arena
   (404 if no record).
 * `POST /api/leaderboard/{arena}/score` - record a match score
-  (upsert-if-higher). The body is `{ "holder_name": "...", "score": N }`.
+  (upsert-if-higher). The body is `{ "holder_name": "...", "score": N }`
+  with an optional `user_id` attributing the score to a profile
+  (issue #12).
 
 Both endpoints go through the `MatchService` (the application service),
 which is the only inbound port. The leaderboard write path is the
@@ -15,6 +17,7 @@ score is the natural shape.
 """
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException
@@ -27,6 +30,7 @@ if TYPE_CHECKING:
 class ScoreSubmission(BaseModel):
     holder_name: str = Field(..., min_length=1, max_length=32)
     score: int = Field(..., ge=0)
+    user_id: uuid.UUID | None = None
 
 
 def build_router(container: Container) -> APIRouter:
@@ -44,7 +48,10 @@ def build_router(container: Container) -> APIRouter:
     async def post_score(arena: str, body: ScoreSubmission) -> dict:
         service = container.match_service()
         return await service.record_match_score(
-            arena, body.holder_name, body.score
+            arena,
+            body.holder_name,
+            body.score,
+            user_id=str(body.user_id) if body.user_id is not None else None,
         )
 
     return router

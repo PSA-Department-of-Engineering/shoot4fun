@@ -1,6 +1,11 @@
 import { useEffect, type MouseEvent } from "react";
 
 import {
+    selectIsAdopted,
+    selectUsername,
+    useProfile,
+} from "@/ui/viewmodels/profile";
+import {
     formatSensitivity,
     formatVolume,
     SENSITIVITY_MAX,
@@ -36,6 +41,24 @@ export const SettingsDialog = () => {
     const setSensitivity = useSettings((s) => s.setSensitivity);
     const setMasterVolume = useSettings((s) => s.setMasterVolume);
     const setSfxVolume = useSettings((s) => s.setSfxVolume);
+    const isAdopted = useProfile(selectIsAdopted);
+    const username = useProfile(selectUsername);
+    const syncSettings = useProfile((s) => s.syncSettings);
+
+    /* A slider change is applied live and mirrored to the adopted
+     * profile, so the value follows the player across machines. */
+    const onChangeSensitivity = (value: number) => {
+        setSensitivity(value);
+        syncSettings(value, undefined, undefined);
+    };
+    const onChangeMasterVolume = (value: number) => {
+        setMasterVolume(value);
+        syncSettings(undefined, value, undefined);
+    };
+    const onChangeSfxVolume = (value: number) => {
+        setSfxVolume(value);
+        syncSettings(undefined, undefined, value);
+    };
 
     useEffect(() => {
         if (!isOpen) return;
@@ -72,7 +95,7 @@ export const SettingsDialog = () => {
                     min={SENSITIVITY_MIN}
                     max={SENSITIVITY_MAX}
                     step={SENSITIVITY_STEP}
-                    onChange={setSensitivity}
+                    onChange={onChangeSensitivity}
                 />
                 <SettingSlider
                     id="setting-master"
@@ -82,7 +105,7 @@ export const SettingsDialog = () => {
                     min={0}
                     max={1}
                     step={0.01}
-                    onChange={setMasterVolume}
+                    onChange={onChangeMasterVolume}
                 />
                 <SettingSlider
                     id="setting-sfx"
@@ -92,8 +115,14 @@ export const SettingsDialog = () => {
                     min={0}
                     max={1}
                     step={0.01}
-                    onChange={setSfxVolume}
+                    onChange={onChangeSfxVolume}
                 />
+
+                {isAdopted && username ? (
+                    <p className="modal__profile" data-settings-profile>
+                        Saved to profile <strong>{username}</strong>
+                    </p>
+                ) : null}
 
                 <h3 className="modal__subtitle">Controls</h3>
                 <dl className="keybinds">

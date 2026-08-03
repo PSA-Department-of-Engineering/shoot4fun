@@ -14,7 +14,8 @@ type: Reference
 | Movement routine | Python, mirrored in TypeScript | Position and intent in, next position out. Bounds and cover |
 | Hitscan | Python | Ray from the shooter's eye versus cover boxes and player capsules |
 | Match state machine | Python | `lobby -> playing -> results` transitions |
-| Leaderboard | asyncpg against `pg-app-shoot4fun`, or in-memory | Best score per arena, upsert-if-higher |
+| Leaderboard | asyncpg against `pg-app-shoot4fun`, or in-memory | Best score per arena, upsert-if-higher, optional profile attribution |
+| Profile store | asyncpg against `pg-app-shoot4fun`, or in-memory | The `users` table: unique username, display name, and the three preferences (sensitivity, master/SFX volume) |
 | Scene | Three.js | Renderer, camera rig, arena meshes, avatars, particles, frame loop |
 | Prediction and interpolation | TypeScript | The local player replayed, everyone else sampled in the past |
 | HUD and surfaces | DOM (brand tokens) | Crosshair, health, ammo, respawn, lobby, results, settings |
@@ -104,9 +105,15 @@ Server to client:
 | `GET /api/health` | Liveness and version |
 | `GET /api/arenas` | The arenas a room can be set to, with the lobby's display copy |
 | `GET /api/leaderboard/{arena}` | Best score for an arena, 404 when there is none |
-| `POST /api/leaderboard/{arena}/score` | Upsert-if-higher, body `{holder_name, score}` |
+| `POST /api/leaderboard/{arena}/score` | Upsert-if-higher, body `{holder_name, score}`, optional `user_id` attribution |
+| `POST /api/users` | Adopt a username and create its profile, 409 when taken |
+| `GET /api/users/{username}` | Read a profile, 404 when unknown |
+| `PATCH /api/users/{username}` | Patch profile fields, all optional |
 
-`DATABASE_URL` selects the Postgres leaderboard; without it the in-memory one runs. `DISABLE_TICK_LOOP=1` starts the app without the simulation task.
+`DATABASE_URL` selects the Postgres adapters; without it the in-memory
+ones run. `DISABLE_TICK_LOOP=1` starts the app without the simulation
+task. The profile endpoints carry no authentication: the username is an
+adopted handle until the login work (a separate issue) lands.
 
 ## Match lifecycle
 

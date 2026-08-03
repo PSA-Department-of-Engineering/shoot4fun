@@ -2,12 +2,17 @@
 
 Backs the `LDR-002` claim with the platform's per-app database role
 (`pg-app-shoot4fun`). The schema is a single `leaderboard` table with
-one row per arena, upserted on the `best_score` column.
+one row per arena, upserted on the `best_score` column, carrying an
+optional `user_id` reference to a profile (`users.id`, issue #12) so a
+score is attributable once login lands; guest scores keep `NULL`.
 
 The DSN comes from `DATABASE_URL`; the platform mounts it via the
 secret-plus-reflector mirror scoped to the `shoot4fun` namespace. A
 missing DSN is a startup error (the contract is the platform-minted
-credential, not a fallback to the in-memory store).
+credential, not a fallback to the in-memory store). The `user_id`
+foreign key references the `users` table, which the user repository
+creates, so that repository must connect first (the container orders
+the two in `start()`).
 """
 from __future__ import annotations
 
@@ -30,8 +35,12 @@ CREATE TABLE IF NOT EXISTS leaderboard (
     best_score INTEGER NOT NULL,
     holder_name TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-)
+);
+ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL
 """
+
+_ENTRY_COLUMNS = "arena, best_score, holder_name, user_id, updated_at"
 
 
 class PostgresLeaderboardRepository(LeaderboardRepository):
@@ -56,66 +65,60 @@ class PostgresLeaderboardRepository(LeaderboardRepository):
         assert self._pool is not None, "call connect() first"
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT arena, best_score, holder_name, updated_at "
-                "FROM leaderboard WHERE arena = $1",
+                f"SELECT {_ENTRY_COLUMNS} FROM leaderboard WHERE arena = $1",
                 arena,
             )
-        if row is None:
-            return None
-        return LeaderboardEntry(
-            arena=row["arena"],
-            best_score=row["best_score"],
-            holder_name=row["holder_name"],
-            updated_at=row["updated_at"].isoformat(),
-        )
+        return _row_to_entry(row) if row is not None else None
 
     async def upsert_if_higher(
-        self, arena: str, holder_name: str, score: int
+        self,
+        arena: str,
+        holder_name: str,
+        score: int,
+        user_id: str | None = None,
     ) -> LeaderboardEntry:
         assert self._pool is not None, "call connect() first"
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                """
-                INSERT INTO leaderboard (arena, best_score, holder_name, updated_at)
-                VALUES ($1, $2, $3, now())
+                f"""
+                INSERT INTO leaderboard (arena, best_score, holder_name, user_id, updated_at)
+                VALUES ($1, $2, $3, $4, now())
                 ON CONFLICT (arena) DO UPDATE
                   SET best_score = EXCLUDED.best_score,
                       holder_name = EXCLUDED.holder_name,
+                      user_id = EXCLUDED.user_id,
                       updated_at = now()
                   WHERE EXCLUDED.best_score > leaderboard.best_score
-                RETURNING arena, best_score, holder_name, updated_at
+                RETURNING {_ENTRY_COLUMNS}
                 """,
                 arena,
                 score,
                 holder_name,
+                user_id,
             )
         if row is None:
             existing = await self.get_best(arena)
             assert existing is not None, "upsert returned no row and get_best too"
             return existing
-        return LeaderboardEntry(
-            arena=row["arena"],
-            best_score=row["best_score"],
-            holder_name=row["holder_name"],
-            updated_at=row["updated_at"].isoformat(),
-        )
+        return _row_to_entry(row)
 
     async def list_top(self, arena: str, limit: int = 10) -> list[LeaderboardEntry]:
         assert self._pool is not None, "call connect() first"
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT arena, best_score, holder_name, updated_at "
-                "FROM leaderboard WHERE arena = $1 "
+                f"SELECT {_ENTRY_COLUMNS} FROM leaderboard WHERE arena = $1 "
                 "ORDER BY best_score DESC LIMIT $2",
                 arena,
                 limit,
             )
-        return [
-            LeaderboardEntry(
-                arena=r["arena"],
-                best_score=r["best_score"],
-                holder_name=r["holder_name"],
-                updated_at=r["updated_at"].isoformat(),
-            )
-            for r in rows
-        ]
+        return [_row_to_entry(r) for r in rows]
+
+
+def _row_to_entry(row: asyncpg.Record) -> LeaderboardEntry:
+    return LeaderboardEntry(
+        arena=row["arena"],
+        best_score=row["best_score"],
+        holder_name=row["holder_name"],
+        updated_at=row["updated_at"].isoformat(),
+        user_id=str(row["user_id"]) if row["user_id"] is not None else None,
+    )
