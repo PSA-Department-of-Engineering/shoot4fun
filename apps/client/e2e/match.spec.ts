@@ -473,8 +473,10 @@ test.describe("a match", () => {
                 await advance(host, "w", 3, 5_000);
                 const rangeAfter = await rangeToOpponent(host);
                 if (!(rangeAfter < rangeBefore - 1)) {
-                    await advance(host, sidestep, 4, 5_000);
-                    sidestep = sidestep === "d" ? "a" : "d";
+                    const made = await advance(host, sidestep, 4, 5_000);
+                    if (!made) {
+                        sidestep = sidestep === "d" ? "a" : "d";
+                    }
                 }
             }
 
