@@ -31,6 +31,22 @@ interface DebugSurface {
     framesRendered(): number;
     lookYaw(): number;
     ammo(): number | null;
+    sentFrames(): {
+        seq: number;
+        dt: number;
+        yaw: number;
+        pitch: number;
+        forward: boolean;
+        back: boolean;
+        left: boolean;
+        right: boolean;
+        fire: boolean;
+    }[];
+    serverWord(): {
+        yaw: number;
+        ack: number;
+        position: { x: number; y: number; z: number } | null;
+    };
 }
 
 interface Vec3 {
@@ -196,6 +212,9 @@ async function describeAim(page: Page, attempt: number): Promise<string> {
     const state = await page.evaluate(() => {
         const me = window.__sfDebug.position();
         const them = window.__sfDebug.remotes()[0] ?? null;
+        const sent = window.__sfDebug.sentFrames();
+        const last = sent[sent.length - 1] ?? null;
+        const word = window.__sfDebug.serverWord();
         return {
             me: { x: me.x, z: me.z },
             them: them ? { x: them.x, z: them.z } : null,
@@ -204,6 +223,13 @@ async function describeAim(page: Page, attempt: number): Promise<string> {
             locked: window.__sfDebug.locked(),
             frames: window.__sfDebug.framesRendered(),
             ammo: window.__sfDebug.ammo(),
+            /* The wire and the server's adoption of it: what was
+             * actually sent, and what the server says it adopted.
+             * aim-off-by reads the controller; these read the two
+             * things that can diverge from it (issue #8). */
+            sent,
+            last,
+            word,
         };
     });
     const range = state.them
@@ -222,8 +248,34 @@ async function describeAim(page: Page, attempt: number): Promise<string> {
         `  #${attempt} at (${state.me.x.toFixed(1)}, ${state.me.z.toFixed(1)})` +
         ` target ${state.them ? `(${state.them.x.toFixed(1)}, ${state.them.z.toFixed(1)})` : "unknown"}` +
         ` range ${range.toFixed(1)}m aim-off-by ${offBy.toFixed(3)}rad` +
-        ` locked=${state.locked} frames=${state.frames} ammo=${state.ammo}`
+        ` locked=${state.locked} frames=${state.frames} ammo=${state.ammo}` +
+        wireLine(state)
     );
+}
+
+/* The wire state and the server's adoption of it, so a failure can say
+ * which side the aim diverged on: what the controller held, what the
+ * client sent, and what the server adopted are three facts, and the
+ * first alone cannot convict the other two (issue #8). */
+function wireLine(state: {
+    sent: ReturnType<DebugSurface["sentFrames"]>;
+    last: ReturnType<DebugSurface["sentFrames"]>[number] | null;
+    word: { yaw: number; ack: number; position: { x: number; y: number; z: number } | null };
+}): string {
+    const buttons = (f: { forward: boolean; back: boolean; left: boolean; right: boolean; fire: boolean } | null): string =>
+        f
+            ? [f.forward && "w", f.back && "s", f.left && "a", f.right && "d", f.fire && "f"]
+                  .filter(Boolean)
+                  .join("") || "-"
+            : "-";
+    const wire = state.last
+        ? `yaw ${state.last.yaw.toFixed(3)} btn ${buttons(state.last)}`
+        : "none";
+    const server = state.word.position
+        ? `yaw ${state.word.yaw.toFixed(3)} pos (${state.word.position.x.toFixed(1)}, ${state.word.position.z.toFixed(1)}) ack ${state.word.ack}`
+        : "none";
+    const gap = state.last ? state.last.seq - state.word.ack : 0;
+    return ` wire[${wire}] server[${server}] ack-gap ${gap}`;
 }
 
 /* Hold `key` until `metres` have been covered, or give up.

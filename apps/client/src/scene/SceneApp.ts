@@ -39,7 +39,7 @@ import type { MatchClient } from "../net/MatchClient";
 import type { ArenaWire, PlayerWire, RoomSnapshot } from "../net/protocol";
 import { Predictor } from "../sim/Predictor";
 import { SnapshotBuffer } from "../sim/SnapshotBuffer";
-import { MAX_FRAME_DT, clampPitch, type ArenaLike } from "../sim/movement";
+import { MAX_FRAME_DT, clampPitch, type ArenaLike, type Vec3Like } from "../sim/movement";
 import { Avatar } from "./Avatar";
 import { CharacterLibrary } from "./CharacterLibrary";
 import { disposeChildren, disposeObject } from "./dispose";
@@ -200,6 +200,31 @@ export function createSceneApp(): SceneApp {
     let lastLookPitch = 0;
     let localSpeed = 0;
     const clock = new THREE.Clock();
+
+    /* The input frames this client actually put on the wire, most
+     * recent last. A harness that watches the scene but not the wire
+     * cannot tell "the client sent a different yaw than it holds" from
+     * "the server integrated it differently", and under a stalled
+     * frame loop the two can diverge for real (issue #8). */
+    interface SentFrameLog {
+        seq: number;
+        dt: number;
+        yaw: number;
+        pitch: number;
+        forward: boolean;
+        back: boolean;
+        left: boolean;
+        right: boolean;
+        fire: boolean;
+    }
+    const SENT_LOG_CAP = 128;
+    const sentLog: SentFrameLog[] = [];
+    /* The server's own word about this client, as the last snapshot
+     * carried it: the yaw it adopted, the position it settled on, and
+     * the last input sequence it consumed. */
+    let serverYaw = 0;
+    let serverAck = 0;
+    let serverPosition: Vec3Like | null = null;
 
     const stateHandlers = new Set<(r: RoomSnapshot) => void>();
     const localHandlers = new Set<(p: PlayerWire) => void>();
@@ -372,6 +397,18 @@ export function createSceneApp(): SceneApp {
                     yaw: sample.yaw,
                     pitch: lookPitch,
                 });
+                sentLog.push({
+                    seq: inputSeq,
+                    dt: slice,
+                    yaw: sample.yaw,
+                    pitch: lookPitch,
+                    forward: sample.forward,
+                    back: sample.back,
+                    left: sample.left,
+                    right: sample.right,
+                    fire: sample.fire && localAlive,
+                });
+                if (sentLog.length > SENT_LOG_CAP) sentLog.shift();
                 // At least one frame always goes, even at dt 0: it carries
                 // the look angles and the trigger, which move no distance
                 // but still have to reach the server.
@@ -585,6 +622,18 @@ export function createSceneApp(): SceneApp {
              * computes a correction against that reading over-rotates
              * on a machine drawing a few frames a second. */
             lookYaw: () => input.sample().yaw,
+            /* The most recent input frames actually sent on the wire,
+             * and the server's adopted word for this client from the
+             * last snapshot. The held yaw and the wire yaw are the
+             * same object in the frame loop, so a divergence between
+             * the two, or between the wire and the server's adoption,
+             * is the diagnosis rather than a guess (issue #8). */
+            sentFrames: () => sentLog.slice(-16),
+            serverWord: () => ({
+                yaw: serverYaw,
+                ack: serverAck,
+                position: serverPosition ? { ...serverPosition } : null,
+            }),
             ammo: () =>
                 room?.players.find((p) => p.id === localPlayerId)?.ammo ?? null,
             minHealth: () =>
@@ -618,6 +667,9 @@ export function createSceneApp(): SceneApp {
 
         const me = next.players.find((p) => p.id === localPlayerId);
         if (me && arena) {
+            serverYaw = me.yaw;
+            serverAck = me.last_input_seq;
+            serverPosition = me.position;
             const wasAlive = localAlive;
             localAlive = me.is_alive;
             localReloading = me.is_reloading;
