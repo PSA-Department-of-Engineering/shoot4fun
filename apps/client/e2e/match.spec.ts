@@ -453,7 +453,7 @@ test.describe("a match", () => {
             // "It did not hit" is not a diagnosis, and this runs on
             // machines far slower than the one it was written on.
             const telemetry: string[] = [];
-            let sidestep: "a" | "d" = "d";
+            let sidestep: "a" | "d" = "a";
 
             for (let approach = 0; approach < 15 && lowest === 100; approach++) {
                 await aimAtOpponent(host);
@@ -472,7 +472,9 @@ test.describe("a match", () => {
                 const rangeBefore = await rangeToOpponent(host);
                 await advance(host, "w", 5, 3_000);
                 const rangeAfter = await rangeToOpponent(host);
-                if (!(rangeAfter < rangeBefore - 1)) {
+                if (rangeAfter < rangeBefore - 1) {
+                    sidestep = "a";
+                } else {
                     const made = await advance(host, sidestep, 7, 3_000);
                     if (!made) {
                         sidestep = sidestep === "d" ? "a" : "d";
