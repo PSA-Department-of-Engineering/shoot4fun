@@ -455,7 +455,7 @@ test.describe("a match", () => {
             const telemetry: string[] = [];
             let sidestep: "a" | "d" = "d";
 
-            for (let approach = 0; approach < 25 && lowest === 100; approach++) {
+            for (let approach = 0; approach < 15 && lowest === 100; approach++) {
                 await aimAtOpponent(host);
                 telemetry.push(await describeAim(host, approach));
                 lowest = await burstAndWatch(host, guest, 1_500);
@@ -470,10 +470,10 @@ test.describe("a match", () => {
                  * for the way around, alternating sides so a wall cannot
                  * pin it against the same edge twice. */
                 const rangeBefore = await rangeToOpponent(host);
-                await advance(host, "w", 4, 5_000);
+                await advance(host, "w", 5, 3_000);
                 const rangeAfter = await rangeToOpponent(host);
                 if (!(rangeAfter < rangeBefore - 1)) {
-                    const made = await advance(host, sidestep, 5, 5_000);
+                    const made = await advance(host, sidestep, 7, 3_000);
                     if (!made) {
                         sidestep = sidestep === "d" ? "a" : "d";
                     }
