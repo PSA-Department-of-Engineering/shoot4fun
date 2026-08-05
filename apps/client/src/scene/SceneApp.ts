@@ -606,6 +606,11 @@ export function createSceneApp(): SceneApp {
                 room
                     ? { min: room.arena.bounds_min, max: room.arena.bounds_max }
                     : null,
+            /* The cover the server sent, the same object rebuildArena drew
+             * the scene from and the predictor already replays movement
+             * against - so a harness can reason about line of fire
+             * against the real arena instead of a copy of one. */
+            cover: () => room?.arena.cover ?? [],
             state: () => room?.state ?? null,
             localId: () => localPlayerId,
             /* This client's own hit points, as the server last sent them.
