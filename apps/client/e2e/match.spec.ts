@@ -63,6 +63,14 @@ declare global {
 
 const MOVE_SPEED = 6.0;
 
+/* Reconciliation correction (metres) below which the predicted position
+ * is close enough to the server's that a shot fired from it and a shot
+ * the server raycasts from its own position agree. INT-004 waits for
+ * this before firing, because a stride of origin error over a 60m line
+ * misses (issue #8). Comfortably above the server's own DESYNC_THRESHOLD
+ * of 0.25m, so an at-rest client clears it without splitting hairs. */
+const DESYNC_SETTLED_M = 0.35;
+
 /* Every context opened by a test, closed after it.
  *
  * A browser left open keeps rendering WebGL, and the suite runs one
@@ -177,33 +185,53 @@ async function aimAtOpponent(page: Page): Promise<void> {
     });
 }
 
-/** Hold the trigger for `ms`, then report the lowest health the victim's
- * own client has ever been told it had.
+/** Aim until the yaw the client has actually SENT points at the opponent,
+ * within `toleranceRad`. Returns whether it got there before `timeoutMs`.
+ *
+ * `aimAtOpponent` turns the controller instantly, but the server raycasts
+ * a shot from the yaw the client last put on the wire, and a frame is only
+ * sent when the loop renders. On a software-rendered runner that lags the
+ * held aim badly (issue #8: ~80 degrees of wire lag behind an aim-off-by
+ * of zero), so a burst fired the instant the controller is on target flies
+ * wide. This keeps nudging the aim, letting the frame loop run between
+ * nudges, until the last frame ON THE WIRE - the one the server will shoot
+ * along - is itself on the opponent. */
+async function aimOntoWire(
+    page: Page,
+    toleranceRad: number,
+    timeoutMs: number,
+): Promise<boolean> {
+    const until = Date.now() + timeoutMs;
+    while (Date.now() < until) {
+        await aimAtOpponent(page);
+        const offBy = await page.evaluate(() => {
+            const me = window.__sfDebug.position();
+            const them = window.__sfDebug.remotes()[0];
+            const sent = window.__sfDebug.sentFrames();
+            const last = sent[sent.length - 1];
+            if (!them || !last) return null;
+            const wanted = Math.atan2(-(them.x - me.x), -(them.z - me.z));
+            let d = (wanted - last.yaw) % (Math.PI * 2);
+            if (d > Math.PI) d -= Math.PI * 2;
+            if (d < -Math.PI) d += Math.PI * 2;
+            return Math.abs(d);
+        });
+        if (offBy !== null && offBy < toleranceRad) return true;
+        await page.waitForTimeout(100);
+    }
+    return false;
+}
+
+/** The lowest health the victim's own client has ever been told it had.
  *
  * The floor is recorded by the victim's client as snapshots arrive, not
  * sampled by the test. Polling across a process boundary cannot see a
  * hit reliably: damage lands, and three seconds later the respawn puts
  * health back to full, so a sampler that is slower than that reads an
  * untouched player and calls a working hit path broken. */
-async function burstAndWatch(shooter: Page, victim: Page, ms: number): Promise<number> {
-    await shooter.mouse.down();
-    try {
-        await shooter.waitForTimeout(ms);
-    } finally {
-        await shooter.mouse.up();
-    }
+async function healthFloor(victim: Page): Promise<number> {
     const floor = await victim.evaluate(() => window.__sfDebug.minHealth());
     return typeof floor === "number" ? floor : 100;
-}
-
-/** Metres between the shooter and the opponent it can see. */
-async function rangeToOpponent(page: Page): Promise<number> {
-    return page.evaluate(() => {
-        const me = window.__sfDebug.position();
-        const them = window.__sfDebug.remotes()[0];
-        if (!them) return Number.POSITIVE_INFINITY;
-        return Math.hypot(them.x - me.x, them.z - me.z);
-    });
 }
 
 /** One line describing where the shooter is, where it is pointing, and
@@ -276,32 +304,6 @@ function wireLine(state: {
         : "none";
     const gap = state.last ? state.last.seq - state.word.ack : 0;
     return ` wire[${wire}] server[${server}] ack-gap ${gap}`;
-}
-
-/* Hold `key` until `metres` have been covered, or give up.
- *
- * Returns whether the distance was made. Walking into a wall stalls
- * rather than fails: the arena is allowed to have walls in it, and a
- * caller that wants to get somewhere needs to know it was blocked so it
- * can try another way. */
-async function advance(
-    page: Page,
-    key: string,
-    metres: number,
-    timeoutMs: number,
-): Promise<boolean> {
-    const from = await positionOf(page);
-    await page.keyboard.down(key);
-    try {
-        const until = Date.now() + timeoutMs;
-        while (Date.now() < until) {
-            if (distanceFrom(from, await positionOf(page)) >= metres) return true;
-            await page.waitForTimeout(150);
-        }
-        return false;
-    } finally {
-        await page.keyboard.up(key);
-    }
 }
 
 /** Click the gate to take pointer lock, the way a player does. */
@@ -453,31 +455,98 @@ test.describe("a match", () => {
             // "It did not hit" is not a diagnosis, and this runs on
             // machines far slower than the one it was written on.
             const telemetry: string[] = [];
-            let sidestep: "a" | "d" = "a";
 
-            for (let approach = 0; approach < 15 && lowest === 100; approach++) {
-                await aimAtOpponent(host);
-                telemetry.push(await describeAim(host, approach));
-                lowest = await burstAndWatch(host, guest, 1_500);
+            /* The two deep spawns look down the long ~60m diagonal, and
+             * the only eye-level thing on that line from the spawn is the
+             * centre block: 3m of wall on a line already inside bullet
+             * range (BULLET_RANGE is 80m; every other box in the shooter's
+             * quarter tops out below the eye and a level shot clears it).
+             * So landing a shot is a matter of clearing that one block,
+             * not of closing the distance - the arena opens "the moment
+             * either of them steps off the spawn" (arena.py).
+             *
+             * Two facts, both learned on the runner, shape the approach.
+             * First, the telemetry (issue #8) settled that the aim is
+             * sound: wire yaw equals server yaw with a zero ack-gap on
+             * every attempt, so the client sends the aim it holds and the
+             * server adopts it. Second, a shot fired WHILE strafing does
+             * not land even once the sightline is open: the server
+             * raycasts from its own authoritative position for the
+             * shooter, and on a runner taking a big step per frame that
+             * trails the client's predicted position by a stride - a
+             * metre or two of origin error thrown across 60m misses the
+             * target entirely. Firing on the move swept the whole open
+             * line and drew no blood for exactly that reason.
+             *
+             * So step off the diagonal, STOP, and let prediction settle
+             * onto the server before firing, so the barrel and the
+             * server's origin agree. Sweep in short stationary stances to
+             * both sides: strafe a few metres, release, let the position
+             * converge, re-aim, and fire a fixed burst from a standstill.
+             * One of those stances clears the block with the origins
+             * agreed, and the shot lands. Every wait is on a condition
+             * polled from the frame loop, never a stopwatch: a
+             * software-rendered runner can pass a wall-clock window
+             * without rendering a frame. */
+            const STANCE_STEP_M = 3;
+            const sweeps: ("a" | "d")[] = ["a", "d", "a", "d"];
+            for (const dir of sweeps) {
                 if (lowest < 100) break;
+                for (let stance = 0; stance < 8 && lowest === 100; stance++) {
+                    // Strafe one short step off the current stance, judged
+                    // by ground covered, then release. A wall just stalls
+                    // the step; the burst still fires from where it got to.
+                    await aimAtOpponent(host);
+                    const from = await positionOf(host);
+                    await host.keyboard.down(dir);
+                    const moveUntil = Date.now() + 4_000;
+                    while (Date.now() < moveUntil) {
+                        if (distanceFrom(from, await positionOf(host)) >= STANCE_STEP_M) {
+                            break;
+                        }
+                        await host.waitForTimeout(100);
+                    }
+                    await host.keyboard.up(dir);
 
-                /* Nothing landed, so cover is in the way. Close in, and
-                 * judge that by the RANGE to the opponent rather than by
-                 * ground covered: walking into a wall slides along it,
-                 * which covers plenty of ground while getting no nearer,
-                 * and a shooter that mistakes the two grinds into a
-                 * corner. When the range stops falling, sidestep to look
-                 * for the way around, alternating sides so a wall cannot
-                 * pin it against the same edge twice. */
-                const rangeBefore = await rangeToOpponent(host);
-                await advance(host, "w", 5, 3_000);
-                const rangeAfter = await rangeToOpponent(host);
-                if (rangeAfter < rangeBefore - 1) {
-                    sidestep = "a";
-                } else {
-                    const made = await advance(host, sidestep, 7, 3_000);
-                    if (!made) {
-                        sidestep = sidestep === "d" ? "a" : "d";
+                    // Let the predicted position converge onto the server's
+                    // before firing: a burst is only worth taking once the
+                    // origin the server will raycast from is the one the
+                    // barrel was aimed from. Fire anyway if it is slow to
+                    // settle - the next stance gets another go.
+                    const settleUntil = Date.now() + 6_000;
+                    while (Date.now() < settleUntil) {
+                        const drift = await host.evaluate(() =>
+                            window.__sfDebug.correction(),
+                        );
+                        if (drift < DESYNC_SETTLED_M) break;
+                        await host.waitForTimeout(100);
+                    }
+
+                    // Drive the SENT yaw onto the opponent before firing,
+                    // not just the held one. aim-off-by reads the yaw the
+                    // controller holds; the server raycasts from the yaw the
+                    // client last put on the wire, and on a runner rendering
+                    // a frame every few hundred ms that trails the held aim by
+                    // a wide margin - the wire showed ~80 degrees of lag while
+                    // aim-off-by read zero (issue #8), so every burst flew
+                    // wide. Wait until the wire itself points at the opponent,
+                    // then the trigger is pulled only once the server has the
+                    // aim the barrel is on.
+                    const onTarget = await aimOntoWire(host, 0.02, 4_000);
+                    if (telemetry.length < 32) {
+                        telemetry.push(await describeAim(host, telemetry.length));
+                    }
+                    if (!onTarget) continue;
+
+                    await host.mouse.down();
+                    try {
+                        const fireUntil = Date.now() + 2_500;
+                        while (Date.now() < fireUntil && lowest === 100) {
+                            lowest = Math.min(lowest, await healthFloor(guest));
+                            await host.waitForTimeout(100);
+                        }
+                    } finally {
+                        await host.mouse.up();
                     }
                 }
             }
