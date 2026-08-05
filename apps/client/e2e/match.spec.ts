@@ -407,8 +407,14 @@ async function healthFloor(victim: Page): Promise<number> {
 }
 
 /** One line describing where the shooter is, where it is pointing, and
- * whether its frame loop is running. Read on failure, not on success. */
-async function describeAim(page: Page, attempt: number): Promise<string> {
+ * whether its frame loop is running. Read on failure, not on success.
+ *
+ * `label` tags which phase of the attempt the sample was taken in
+ * (issue #21): every previous sample here was taken before the trigger
+ * was ever pulled, which can only prove the aim was right at that
+ * instant - not what was actually on the wire while the trigger stayed
+ * held, which is the one thing a failing run has never shown. */
+async function describeAim(page: Page, attempt: number, label: string): Promise<string> {
     const state = await page.evaluate(() => {
         const me = window.__sfDebug.position();
         const them = window.__sfDebug.remotes()[0] ?? null;
@@ -445,7 +451,7 @@ async function describeAim(page: Page, attempt: number): Promise<string> {
         offBy = Math.abs(d);
     }
     return (
-        `  #${attempt} at (${state.me.x.toFixed(1)}, ${state.me.z.toFixed(1)})` +
+        `  #${attempt} [${label}] at (${state.me.x.toFixed(1)}, ${state.me.z.toFixed(1)})` +
         ` target ${state.them ? `(${state.them.x.toFixed(1)}, ${state.them.z.toFixed(1)})` : "unknown"}` +
         ` range ${range.toFixed(1)}m aim-off-by ${offBy.toFixed(3)}rad` +
         ` locked=${state.locked} frames=${state.frames} ammo=${state.ammo}` +
@@ -697,19 +703,33 @@ test.describe("a match", () => {
                 // server has the aim the barrel is on.
                 const onTarget = await aimOntoWire(host, 4_000);
                 if (telemetry.length < 32) {
-                    telemetry.push(await describeAim(host, telemetry.length));
+                    telemetry.push(await describeAim(host, telemetry.length, "pre-fire"));
                 }
                 if (!onTarget) continue;
 
                 await host.mouse.down();
                 try {
                     const fireUntil = Date.now() + 2_500;
+                    // Sample the wire while the trigger stays held, not
+                    // just before it is pulled (issue #21): roughly every
+                    // 600ms, so a failing run shows whether `fire` ever
+                    // actually reached the wire and what yaw it carried
+                    // while it did, instead of only what the controller
+                    // held a moment before mouse.down().
+                    let nextSample = Date.now();
                     while (Date.now() < fireUntil && lowest === 100) {
                         lowest = Math.min(lowest, await healthFloor(guest));
+                        if (Date.now() >= nextSample && telemetry.length < 32) {
+                            telemetry.push(await describeAim(host, telemetry.length, "firing"));
+                            nextSample = Date.now() + 600;
+                        }
                         await host.waitForTimeout(100);
                     }
                 } finally {
                     await host.mouse.up();
+                    if (telemetry.length < 32) {
+                        telemetry.push(await describeAim(host, telemetry.length, "after-release"));
+                    }
                 }
             }
 
