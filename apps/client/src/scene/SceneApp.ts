@@ -630,6 +630,7 @@ export function createSceneApp(): SceneApp {
              * computes a correction against that reading over-rotates
              * on a machine drawing a few frames a second. */
             lookYaw: () => input.sample().yaw,
+            lookPitch: () => input.sample().pitch,
             /* The most recent input frames actually sent on the wire,
              * and the server's adopted word for this client from the
              * last snapshot. The held yaw and the wire yaw are the
