@@ -39,6 +39,7 @@ interface DebugSurface {
     sentFrames(): {
         seq: number;
         dt: number;
+        ackTick: number;
         yaw: number;
         pitch: number;
         forward: boolean;
@@ -49,6 +50,7 @@ interface DebugSurface {
     }[];
     serverWord(): {
         yaw: number;
+        pitch: number;
         ack: number;
         position: { x: number; y: number; z: number } | null;
     };
@@ -490,7 +492,7 @@ async function describeAim(page: Page, attempt: number, label: string): Promise<
 function wireLine(state: {
     sent: ReturnType<DebugSurface["sentFrames"]>;
     last: ReturnType<DebugSurface["sentFrames"]>[number] | null;
-    word: { yaw: number; ack: number; position: { x: number; y: number; z: number } | null };
+    word: ReturnType<DebugSurface["serverWord"]>;
 }): string {
     const buttons = (f: { forward: boolean; back: boolean; left: boolean; right: boolean; fire: boolean } | null): string =>
         f
@@ -498,11 +500,18 @@ function wireLine(state: {
                   .filter(Boolean)
                   .join("") || "-"
             : "-";
+    // pitch and ack_tick ride on every real frame but were never shown
+    // here before: pitch because it was assumed level, ack_tick because
+    // nothing had yet named lag compensation a suspect (issue #21's
+    // sequel - the yaw-corruption fix it enabled did not land the shot
+    // either, so the two fields no one had looked at are the ones left).
     const wire = state.last
-        ? `yaw ${state.last.yaw.toFixed(3)} btn ${buttons(state.last)}`
+        ? `yaw ${state.last.yaw.toFixed(3)} pitch ${state.last.pitch.toFixed(3)}` +
+          ` ack_tick ${state.last.ackTick} btn ${buttons(state.last)}`
         : "none";
     const server = state.word.position
-        ? `yaw ${state.word.yaw.toFixed(3)} pos (${state.word.position.x.toFixed(1)}, ${state.word.position.z.toFixed(1)}) ack ${state.word.ack}`
+        ? `yaw ${state.word.yaw.toFixed(3)} pitch ${state.word.pitch.toFixed(3)}` +
+          ` pos (${state.word.position.x.toFixed(1)}, ${state.word.position.z.toFixed(1)}) ack ${state.word.ack}`
         : "none";
     const gap = state.last ? state.last.seq - state.word.ack : 0;
     return ` wire[${wire}] server[${server}] ack-gap ${gap}`;
