@@ -518,13 +518,17 @@ function wireLine(state: {
     return ` wire[${wire}] server[${server}] ack-gap ${gap}`;
 }
 
-/** Click the gate to take pointer lock, the way a player does. */
-async function capturePointer(page: Page): Promise<void> {
+/** Click the gate to take pointer lock, the way a player does.
+ *
+ * Returns whatever trace `levelPitch` gathered trying to correct pitch,
+ * so a caller that cares (INT-004) can fold it into its own failure
+ * output; every other caller can ignore it. */
+async function capturePointer(page: Page): Promise<string[]> {
     const gate = page.locator("[data-gate]");
     await expect(gate).toBeVisible();
     await gate.click();
     await expect.poll(() => page.evaluate(() => window.__sfDebug.locked())).toBe(true);
-    await levelPitch(page);
+    return levelPitch(page);
 }
 
 /** Zero out pitch after taking pointer lock, through the same synthetic
@@ -540,32 +544,44 @@ async function capturePointer(page: Page): Promise<void> {
  * fine vertical aim, but fatal to INT-004's hitscan regardless of how
  * accurate the yaw is.
  *
- * A single read-and-cancel right after the lock engages did not stick
- * (run 31110883232: pitch was still exactly 0.792 rad, unchanged, after
- * that fix landed). The corrupting event does not arrive the instant the
- * lock does; it can land a beat behind whatever real event resolves it,
- * so a check made too early sees a clean 0, corrects nothing, and the
- * corruption still lands right after. This keeps re-checking and
- * re-correcting for a short window instead of trusting one read - the
- * same wire-not-holder discipline `aimOntoWire` already uses for yaw. */
-async function levelPitch(page: Page): Promise<void> {
+ * Two fixes already landed and neither stuck. A single read-and-cancel
+ * right after the lock engages left pitch completely unchanged (run
+ * 31110883232), so this became a 1.5s retry loop on the theory that the
+ * corrupting event lands a beat late - and pitch was STILL exactly
+ * 0.792rad, unchanged, after ~15 correction attempts (run 31112007362).
+ * That rules out a late-arriving one-time event: 1.5s is long enough
+ * that any reasonable delay would have resolved, and not one of fifteen
+ * tries even momentarily budged the value. So this now traces each
+ * attempt - reading pitch, dispatching the correction, and reading pitch
+ * again in the same synchronous tick, with no `await` between - to tell
+ * apart "the dispatch never reaches the handler" (before === after,
+ * every time) from "it works and then gets reasserted before the next
+ * check" (before !== after, but the next iteration's before is back to
+ * the same value regardless). */
+async function levelPitch(page: Page): Promise<string[]> {
+    const trace: string[] = [];
     const until = Date.now() + 1_500;
     while (Date.now() < until) {
-        await page.evaluate(() => {
-            const pitch = window.__sfDebug.lookPitch();
-            if (Math.abs(pitch) < 1e-6) return;
+        const line = await page.evaluate(() => {
+            const before = window.__sfDebug.lookPitch();
+            if (Math.abs(before) < 1e-6) return null;
             // The controller applies pitch -= movementY * sensitivity.
             const sensitivity =
                 Number(window.localStorage.getItem("sf_sensitivity")) || 0.0022;
             window.dispatchEvent(
                 new MouseEvent("mousemove", {
                     movementX: 0,
-                    movementY: pitch / sensitivity,
+                    movementY: before / sensitivity,
                 }),
             );
+            const after = window.__sfDebug.lookPitch();
+            return `before=${before.toFixed(3)} after=${after.toFixed(3)}`;
         });
+        if (line === null) break;
+        trace.push(line);
         await page.waitForTimeout(100);
     }
+    return trace;
 }
 
 test.describe("a match", () => {
@@ -685,7 +701,7 @@ test.describe("a match", () => {
             test.setTimeout(300_000);
             const room = `E2E${Date.now().toString(36).slice(-5).toUpperCase()}`;
             const { host, guest } = await startedMatch(browser, room);
-            await capturePointer(host);
+            const pitchTrace = await capturePointer(host);
 
             const guestHp = guest.locator("[data-health-number]");
             await expect(guestHp).toHaveText("100");
@@ -709,6 +725,9 @@ test.describe("a match", () => {
             // "It did not hit" is not a diagnosis, and this runs on
             // machines far slower than the one it was written on.
             const telemetry: string[] = [];
+            if (pitchTrace.length > 0) {
+                telemetry.push(`  pitch-correct-trace: ${pitchTrace.join(" | ")}`);
+            }
 
             // The room's own cover, not a copy of one: fetched once
             // because it does not change mid-match, and used to decide
