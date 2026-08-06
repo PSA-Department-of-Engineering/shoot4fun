@@ -409,12 +409,15 @@ async function walk(
 ): Promise<void> {
     const from = await positionOf(page);
     await page.keyboard.down(dir);
-    const until = Date.now() + timeoutMs;
-    while (Date.now() < until) {
-        if (distanceFrom(from, await positionOf(page)) >= distanceM) break;
-        await page.waitForTimeout(100);
+    try {
+        const until = Date.now() + timeoutMs;
+        while (Date.now() < until) {
+            if (distanceFrom(from, await positionOf(page)) >= distanceM) break;
+            await page.waitForTimeout(100);
+        }
+    } finally {
+        await page.keyboard.up(dir);
     }
-    await page.keyboard.up(dir);
 }
 
 /** Wait for the predicted position to converge onto the server's before
