@@ -35,6 +35,7 @@ interface DebugSurface {
     minHealth(): number | null;
     framesRendered(): number;
     lookYaw(): number;
+    lookPitch(): number;
     ammo(): number | null;
     sentFrames(): {
         seq: number;
@@ -523,6 +524,36 @@ async function capturePointer(page: Page): Promise<void> {
     await expect(gate).toBeVisible();
     await gate.click();
     await expect.poll(() => page.evaluate(() => window.__sfDebug.locked())).toBe(true);
+    await levelPitch(page);
+}
+
+/** Zero out pitch immediately after taking pointer lock, through the
+ * same synthetic input path aiming uses rather than a real mouse action.
+ *
+ * `gate.click()` above is a real Playwright click, and on the CI runner
+ * part of that click sequence lands after the lock it requests has
+ * already engaged: the same CDP/pointer-lock mismatch issue #8 found in
+ * `page.mouse.down`/`up` (a real click resolving against Chromium's own
+ * stale idea of where the cursor last was), just landing on pitch
+ * instead of yaw here. It held pitch at ~45 degrees for the rest of the
+ * match - invisible to every other test, since none of them depend on
+ * fine vertical aim, but fatal to INT-004's hitscan regardless of how
+ * accurate the yaw is. Levelling it here fixes it for every caller of
+ * `capturePointer`, not just the one test that could see it. */
+async function levelPitch(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const pitch = window.__sfDebug.lookPitch();
+        if (Math.abs(pitch) < 1e-6) return;
+        // The controller applies pitch -= movementY * sensitivity.
+        const sensitivity =
+            Number(window.localStorage.getItem("sf_sensitivity")) || 0.0022;
+        window.dispatchEvent(
+            new MouseEvent("mousemove", {
+                movementX: 0,
+                movementY: pitch / sensitivity,
+            }),
+        );
+    });
 }
 
 test.describe("a match", () => {
