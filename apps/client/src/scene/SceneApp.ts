@@ -209,6 +209,7 @@ export function createSceneApp(): SceneApp {
     interface SentFrameLog {
         seq: number;
         dt: number;
+        ackTick: number;
         yaw: number;
         pitch: number;
         forward: boolean;
@@ -223,6 +224,7 @@ export function createSceneApp(): SceneApp {
      * carried it: the yaw it adopted, the position it settled on, and
      * the last input sequence it consumed. */
     let serverYaw = 0;
+    let serverPitch = 0;
     let serverAck = 0;
     let serverPosition: Vec3Like | null = null;
 
@@ -400,6 +402,7 @@ export function createSceneApp(): SceneApp {
                 sentLog.push({
                     seq: inputSeq,
                     dt: slice,
+                    ackTick: lastTick,
                     yaw: sample.yaw,
                     pitch: lookPitch,
                     forward: sample.forward,
@@ -636,6 +639,7 @@ export function createSceneApp(): SceneApp {
             sentFrames: () => sentLog.slice(-16),
             serverWord: () => ({
                 yaw: serverYaw,
+                pitch: serverPitch,
                 ack: serverAck,
                 position: serverPosition ? { ...serverPosition } : null,
             }),
@@ -673,6 +677,7 @@ export function createSceneApp(): SceneApp {
         const me = next.players.find((p) => p.id === localPlayerId);
         if (me && arena) {
             serverYaw = me.yaw;
+            serverPitch = me.pitch;
             serverAck = me.last_input_seq;
             serverPosition = me.position;
             const wasAlive = localAlive;
