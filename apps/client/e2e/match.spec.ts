@@ -527,33 +527,45 @@ async function capturePointer(page: Page): Promise<void> {
     await levelPitch(page);
 }
 
-/** Zero out pitch immediately after taking pointer lock, through the
- * same synthetic input path aiming uses rather than a real mouse action.
+/** Zero out pitch after taking pointer lock, through the same synthetic
+ * input path aiming uses rather than a real mouse action.
  *
  * `gate.click()` above is a real Playwright click, and on the CI runner
- * part of that click sequence lands after the lock it requests has
+ * part of that click sequence resolves after the lock it requests has
  * already engaged: the same CDP/pointer-lock mismatch issue #8 found in
  * `page.mouse.down`/`up` (a real click resolving against Chromium's own
  * stale idea of where the cursor last was), just landing on pitch
  * instead of yaw here. It held pitch at ~45 degrees for the rest of the
  * match - invisible to every other test, since none of them depend on
  * fine vertical aim, but fatal to INT-004's hitscan regardless of how
- * accurate the yaw is. Levelling it here fixes it for every caller of
- * `capturePointer`, not just the one test that could see it. */
+ * accurate the yaw is.
+ *
+ * A single read-and-cancel right after the lock engages did not stick
+ * (run 31110883232: pitch was still exactly 0.792 rad, unchanged, after
+ * that fix landed). The corrupting event does not arrive the instant the
+ * lock does; it can land a beat behind whatever real event resolves it,
+ * so a check made too early sees a clean 0, corrects nothing, and the
+ * corruption still lands right after. This keeps re-checking and
+ * re-correcting for a short window instead of trusting one read - the
+ * same wire-not-holder discipline `aimOntoWire` already uses for yaw. */
 async function levelPitch(page: Page): Promise<void> {
-    await page.evaluate(() => {
-        const pitch = window.__sfDebug.lookPitch();
-        if (Math.abs(pitch) < 1e-6) return;
-        // The controller applies pitch -= movementY * sensitivity.
-        const sensitivity =
-            Number(window.localStorage.getItem("sf_sensitivity")) || 0.0022;
-        window.dispatchEvent(
-            new MouseEvent("mousemove", {
-                movementX: 0,
-                movementY: pitch / sensitivity,
-            }),
-        );
-    });
+    const until = Date.now() + 1_500;
+    while (Date.now() < until) {
+        await page.evaluate(() => {
+            const pitch = window.__sfDebug.lookPitch();
+            if (Math.abs(pitch) < 1e-6) return;
+            // The controller applies pitch -= movementY * sensitivity.
+            const sensitivity =
+                Number(window.localStorage.getItem("sf_sensitivity")) || 0.0022;
+            window.dispatchEvent(
+                new MouseEvent("mousemove", {
+                    movementX: 0,
+                    movementY: pitch / sensitivity,
+                }),
+            );
+        });
+        await page.waitForTimeout(100);
+    }
 }
 
 test.describe("a match", () => {
