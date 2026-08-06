@@ -214,6 +214,30 @@ async function aimAtOpponent(page: Page): Promise<void> {
     });
 }
 
+/** Pull or release the trigger, through the same input path aiming uses
+ * rather than Playwright's own `page.mouse.down`/`up`.
+ *
+ * Those dispatch a real, CDP-level click at whatever position
+ * Playwright's own mouse tracker last saw - and this suite's aim never
+ * goes through that tracker, since `aimAtOpponent` turns the camera by
+ * dispatching a synthetic `mousemove` directly, bypassing it entirely.
+ * Under an active pointer lock the two fall out of step, and a real
+ * click resolves against Chromium's own idea of where the cursor last
+ * was: on the CI runner this showed up as a fixed ~80 degree yaw jump on
+ * mouse.down, and another on mouse.up, corrupting an aim that was
+ * dead-on the instant the trigger was pulled (issue #8's real cause -
+ * not frame lag, a CDP/pointer-lock mismatch specific to real clicks).
+ * The fix is to never issue one: fire through the same synthetic event
+ * dispatch aiming already trusted, which carries no absolute position at
+ * all for a locked pointer to disagree about. */
+async function setTrigger(page: Page, held: boolean): Promise<void> {
+    await page.evaluate((held) => {
+        window.dispatchEvent(
+            new MouseEvent(held ? "mousedown" : "mouseup", { button: 0 }),
+        );
+    }, held);
+}
+
 /** Aim until the yaw the client has actually SENT points at the opponent
  * closely enough to land the shot, or `timeoutMs` elapses.
  *
@@ -707,7 +731,7 @@ test.describe("a match", () => {
                 }
                 if (!onTarget) continue;
 
-                await host.mouse.down();
+                await setTrigger(host, true);
                 try {
                     const fireUntil = Date.now() + 2_500;
                     // Sample the wire while the trigger stays held, not
@@ -715,7 +739,7 @@ test.describe("a match", () => {
                     // 600ms, so a failing run shows whether `fire` ever
                     // actually reached the wire and what yaw it carried
                     // while it did, instead of only what the controller
-                    // held a moment before mouse.down().
+                    // held a moment before the trigger was pulled.
                     let nextSample = Date.now();
                     while (Date.now() < fireUntil && lowest === 100) {
                         lowest = Math.min(lowest, await healthFloor(guest));
@@ -726,7 +750,7 @@ test.describe("a match", () => {
                         await host.waitForTimeout(100);
                     }
                 } finally {
-                    await host.mouse.up();
+                    await setTrigger(host, false);
                     if (telemetry.length < 32) {
                         telemetry.push(await describeAim(host, telemetry.length, "after-release"));
                     }
