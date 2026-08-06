@@ -190,7 +190,17 @@ function distanceFrom(a: Vec3, b: Vec3): number {
 /* Point the camera at the opponent, through the input path a mouse
  * uses. Pointer-lock deltas are what turn the camera and Playwright's
  * mouse.move is absolute, so the turn is driven by dispatching the same
- * relative-motion event the browser delivers under lock. */
+ * relative-motion event the browser delivers under lock.
+ *
+ * Also levels pitch on every call, not just yaw. `capturePointer`'s own
+ * pitch correction is a best-effort guess at when a real click's
+ * corrupting side effect (issue #8) lands, and guessing wrong just means
+ * it corrects nothing. This call needs no guess: it already runs
+ * continuously throughout the approach and immediately before every
+ * fire, so whenever the corruption actually lands, the next aim here
+ * catches and cancels it regardless of timing - the target is always at
+ * the shooter's own eye height, so level pitch is always the correct
+ * aim, never just a correction of convenience. */
 async function aimAtOpponent(page: Page): Promise<void> {
     await page.evaluate(() => {
         const me = window.__sfDebug.position();
@@ -205,13 +215,14 @@ async function aimAtOpponent(page: Page): Promise<void> {
         let delta = (wanted - window.__sfDebug.lookYaw()) % (Math.PI * 2);
         if (delta > Math.PI) delta -= Math.PI * 2;
         if (delta < -Math.PI) delta += Math.PI * 2;
-        // The controller applies yaw -= movementX * sensitivity.
+        // The controller applies yaw -= movementX * sensitivity and
+        // pitch -= movementY * sensitivity.
         const sensitivity =
             Number(window.localStorage.getItem("sf_sensitivity")) || 0.0022;
         window.dispatchEvent(
             new MouseEvent("mousemove", {
                 movementX: -delta / sensitivity,
-                movementY: 0,
+                movementY: window.__sfDebug.lookPitch() / sensitivity,
             }),
         );
     });
@@ -531,33 +542,33 @@ async function capturePointer(page: Page): Promise<string[]> {
     return levelPitch(page);
 }
 
-/** Zero out pitch after taking pointer lock, through the same synthetic
- * input path aiming uses rather than a real mouse action.
+/** Best-effort: zero out pitch for a short window after taking pointer
+ * lock, through the same synthetic input path aiming uses rather than a
+ * real mouse action.
  *
  * `gate.click()` above is a real Playwright click, and on the CI runner
- * part of that click sequence resolves after the lock it requests has
- * already engaged: the same CDP/pointer-lock mismatch issue #8 found in
- * `page.mouse.down`/`up` (a real click resolving against Chromium's own
- * stale idea of where the cursor last was), just landing on pitch
- * instead of yaw here. It held pitch at ~45 degrees for the rest of the
- * match - invisible to every other test, since none of them depend on
- * fine vertical aim, but fatal to INT-004's hitscan regardless of how
- * accurate the yaw is.
+ * a corrupting side effect of that click - the same CDP/pointer-lock
+ * mismatch issue #8 found in `page.mouse.down`/`up` (a real click
+ * resolving against Chromium's own stale idea of where the cursor last
+ * was) - has been observed landing on pitch here instead of yaw. It held
+ * pitch at ~45 degrees for the rest of the match: invisible to every
+ * other test, since none of them depend on fine vertical aim, but fatal
+ * to INT-004's hitscan regardless of how accurate the yaw is.
  *
- * Two fixes already landed and neither stuck. A single read-and-cancel
- * right after the lock engages left pitch completely unchanged (run
- * 31110883232), so this became a 1.5s retry loop on the theory that the
- * corrupting event lands a beat late - and pitch was STILL exactly
- * 0.792rad, unchanged, after ~15 correction attempts (run 31112007362).
- * That rules out a late-arriving one-time event: 1.5s is long enough
- * that any reasonable delay would have resolved, and not one of fifteen
- * tries even momentarily budged the value. So this now traces each
- * attempt - reading pitch, dispatching the correction, and reading pitch
- * again in the same synchronous tick, with no `await` between - to tell
- * apart "the dispatch never reaches the handler" (before === after,
- * every time) from "it works and then gets reasserted before the next
- * check" (before !== after, but the next iteration's before is back to
- * the same value regardless). */
+ * Three fixes already landed here and none of them stuck, and tracing
+ * why named the actual shape of the problem (runs 31110883232,
+ * 31112007362, 31113518915): the corruption does not land at any fixed
+ * offset from the lock engaging - one run it showed up immediately and
+ * survived fifteen correction attempts over 1.5s unchanged, another it
+ * had not landed yet by the time this function's very first check ran
+ * (which found a clean 0 and, in an earlier version of this function,
+ * wrongly treated that as "done" and stopped watching). There is no
+ * window early enough to reliably catch a corruption with no fixed
+ * timing, so this no longer trusts one. It corrects whenever it happens
+ * to see pitch off during its own short window, as cheap insurance for
+ * every caller of `capturePointer`, but the window is not the real fix:
+ * `aimAtOpponent` levels pitch on every call it makes for the rest of
+ * the match, and it is the only thing INT-004 actually depends on. */
 async function levelPitch(page: Page): Promise<string[]> {
     const trace: string[] = [];
     const until = Date.now() + 1_500;
@@ -577,8 +588,9 @@ async function levelPitch(page: Page): Promise<string[]> {
             const after = window.__sfDebug.lookPitch();
             return `before=${before.toFixed(3)} after=${after.toFixed(3)}`;
         });
-        if (line === null) break;
-        trace.push(line);
+        // No early exit on a clean read: a clean read only means the
+        // corruption has not landed YET, not that it never will:
+        if (line !== null) trace.push(line);
         await page.waitForTimeout(100);
     }
     return trace;
