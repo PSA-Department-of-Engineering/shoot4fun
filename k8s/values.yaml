@@ -38,11 +38,6 @@ server:
 # EXPOSEs 8080), while the Service publishes the conventional 80.
 client:
   replicas: 1
-  port: 8080
-
-docs:
-  image:
-    tag: ""
   port: 80
   containerPort: 8080
 
