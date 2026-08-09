@@ -55,7 +55,8 @@ export interface TouchInput {
     /** Set the stick vector: x right-positive, y forward-positive, each
      * normalised to [-1, 1]. Mapped to the four held directions. */
     move(x: number, y: number): void;
-    /** Turn the camera from a look-pad drag, in pixels, at mouse sensitivity. */
+    /** Turn the camera from a look-pad drag, in pixels, at the dedicated
+     * touch look-sensitivity (issue #34), independent of the mouse dial. */
     look(dx: number, dy: number): void;
     fire(down: boolean): void;
     jump(down: boolean): void;
@@ -67,6 +68,7 @@ export interface TouchInput {
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
 const DEFAULT_SENSITIVITY = 0.0022;
 const SENSITIVITY_KEY = "sf_sensitivity";
+const TOUCH_SENSITIVITY_KEY = "sf_touch_sensitivity";
 
 /* Movement keys by physical position (KeyboardEvent.code), so WASD works
  * on AZERTY and Dvorak without rebinding. Actions are read from `key`,
@@ -102,6 +104,7 @@ export class InputController {
     private yaw = 0;
     private pitch = 0;
     private sensitivity = readSensitivity();
+    private touchSensitivity = readTouchSensitivity();
     private target: HTMLElement | null = null;
     private locked = false;
     private lockListeners = new Set<LockListener>();
@@ -173,6 +176,8 @@ export class InputController {
      * live controller rather than the next page load. */
     private onStorage = (event: StorageEvent): void => {
         if (event.key === SENSITIVITY_KEY) this.sensitivity = readSensitivity();
+        else if (event.key === TOUCH_SENSITIVITY_KEY)
+            this.touchSensitivity = readTouchSensitivity();
     };
 
     /** The current intent. Sampled once per rendered frame. */
@@ -230,8 +235,8 @@ export class InputController {
                 this.setHeld("right", buttons.right);
             },
             look: (dx, dy) => {
-                this.yaw -= dx * this.sensitivity;
-                this.pitch = clampPitch(this.pitch - dy * this.sensitivity);
+                this.yaw -= dx * this.touchSensitivity;
+                this.pitch = clampPitch(this.pitch - dy * this.touchSensitivity);
             },
             fire: (down) => {
                 this.firing = down;
@@ -329,5 +334,13 @@ function clampPitch(pitch: number): number {
 
 function readSensitivity(): number {
     const stored = Number(window.localStorage.getItem(SENSITIVITY_KEY));
+    return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_SENSITIVITY;
+}
+
+/* The look pad's own dial (issue #34). Falls back to the same default as
+ * the mouse, so an unset touch sensitivity aims exactly as the look pad
+ * did when it borrowed the mouse value. */
+function readTouchSensitivity(): number {
+    const stored = Number(window.localStorage.getItem(TOUCH_SENSITIVITY_KEY));
     return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_SENSITIVITY;
 }
