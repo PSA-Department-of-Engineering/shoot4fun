@@ -96,10 +96,26 @@ describe("CharacterLibrary", () => {
         expect(front.z).toBeLessThan(0);
         expect(front.z / front.length()).toBeCloseTo(-1, 6);
 
-        // The flip is about facing, not about size: the instance still
-        // stands at the player height it was asked for.
+        // Facing alone does not pin the turn: a half-turn about X maps
+        // the authored face to -Z exactly as the intended one about Y
+        // does, and leaves the height extent untouched, so it renders
+        // the character inverted and nothing above notices. Up must
+        // still be up, which only the Y turn preserves.
+        const overhead = new THREE.Object3D();
+        overhead.position.set(0, 1, 0);
+        instance!.root.add(overhead);
+        const above = overhead.getWorldPosition(new THREE.Vector3());
+        expect(above.y / above.length()).toBeCloseTo(1, 6);
+
+        // The flip is about facing, not about size or stance: the
+        // instance still stands at the player height it was asked for,
+        // with its feet on the ground rather than hanging below it.
         const bounds = new THREE.Box3().setFromObject(instance!.root);
         expect(bounds.max.y - bounds.min.y).toBeCloseTo(PLAYER_HEIGHT, 3);
+        // The bind pose dips a few millimetres under the origin, so the
+        // ground is a tolerance rather than an equality; an inverted
+        // instance would hang a whole body length beneath it.
+        expect(bounds.min.y).toBeGreaterThan(-0.05);
 
         instance!.dispose();
         library!.dispose();
