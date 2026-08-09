@@ -22,6 +22,7 @@ interface DebugSurface {
     remoteCount(): number;
     remotes(): { id: string; x: number; y: number; z: number; visible: boolean }[];
     coverCount(): number;
+    cover(): CoverBox[];
     sceneArenaId(): string;
     bounds(): { min: Vec3; max: Vec3 } | null;
     state(): string | null;
@@ -37,6 +38,13 @@ interface Vec3 {
     x: number;
     y: number;
     z: number;
+}
+
+interface CoverBox {
+    center: Vec3;
+    half_x: number;
+    half_y: number;
+    half_z: number;
 }
 
 declare global {
@@ -188,6 +196,103 @@ async function rangeToOpponent(page: Page): Promise<number> {
         if (!them) return Number.POSITIVE_INFINITY;
         return Math.hypot(them.x - me.x, them.z - me.z);
     });
+}
+
+/* Where to walk next to earn a clear shot, judged against the arena's
+ * own cover.
+ *
+ * The map is split by a spine of full-height wall, crossed at a few
+ * gaps; short strafes inside the spawn quarter only trade one blocking
+ * wall for another and grind the shooter into a corner (#20). So when
+ * the opponent is on the far side of the spine, route to the nearest of
+ * the map's ways through — a gap between the spine's walls, or round
+ * either end — and cross there. When no spine lies between the two (an
+ * open arena, or already across), close straight on the opponent.
+ *
+ * Returns the point to walk toward and whether that walk is a crossing,
+ * or null when no opponent is in view. */
+async function planApproach(
+    page: Page,
+): Promise<{ x: number; z: number; crossing: boolean } | null> {
+    return page.evaluate(() => {
+        const me = window.__sfDebug.position();
+        const them = window.__sfDebug.remotes()[0];
+        if (!them) return null;
+
+        // The spine is the wall that breaks the sightline (full height,
+        // above the 1.6m eye) and lies across the centre line, z = 0.
+        // Waist- and shoulder-high cover is not spine: a shot clears it,
+        // so it never has to be gone around.
+        const EYE = 1.3;
+        const PASS = 1.5; // half-width a player needs to slip through a gap
+        const spine = window.__sfDebug
+            .cover()
+            .filter((c) => c.half_y >= EYE && Math.abs(c.center.z) <= c.half_z)
+            .map((c) => ({ min: c.center.x - c.half_x, max: c.center.x + c.half_x }))
+            .sort((a, b) => a.min - b.min);
+
+        const across = Math.sign(me.z) === Math.sign(them.z) || them.z === 0;
+        if (spine.length === 0 || across) {
+            return { x: them.x, z: them.z, crossing: false };
+        }
+
+        // The gaps between the spine's walls, and out to the bounds at
+        // each end: the ways through. Each must be wide enough to pass.
+        const bounds = window.__sfDebug.bounds();
+        const lo = bounds ? bounds.min.x : me.x - 100;
+        const hi = bounds ? bounds.max.x : me.x + 100;
+        const gaps: number[] = [];
+        let edge = lo;
+        for (const wall of spine) {
+            if (wall.min - edge >= 2 * PASS) gaps.push((edge + wall.min) / 2);
+            edge = Math.max(edge, wall.max);
+        }
+        if (hi - edge >= 2 * PASS) gaps.push((edge + hi) / 2);
+        if (gaps.length === 0) return { x: them.x, z: them.z, crossing: false };
+
+        // The gap that costs the least ground: to its mouth on this side,
+        // then on to the opponent past it. Aim a little onto the far side
+        // of z = 0 so the walk carries through the gap rather than
+        // stalling in its mouth.
+        let bestX = gaps[0];
+        let best = Number.POSITIVE_INFINITY;
+        for (const gx of gaps) {
+            const cost = Math.hypot(gx - me.x, me.z) + Math.hypot(them.x - gx, them.z);
+            if (cost < best) {
+                best = cost;
+                bestX = gx;
+            }
+        }
+        return { x: bestX, z: Math.sign(them.z) * PASS, crossing: true };
+    });
+}
+
+/* Turn to face a world point and walk toward it. Same input path as
+ * aiming — pointer-lock deltas turn the camera, and forward follows the
+ * look angle — so the walk goes where the plan points. Returns whether
+ * the ground was made (advance()'s contract: a wall stalls the walk). */
+async function walkToward(
+    page: Page,
+    target: { x: number; z: number },
+    metres: number,
+    timeoutMs: number,
+): Promise<boolean> {
+    await page.evaluate((to) => {
+        const me = window.__sfDebug.position();
+        // Forward is (-sin(yaw), 0, -cos(yaw)), so the yaw pointing at
+        // (dx, dz) is atan2(-dx, -dz); correct against where the
+        // controller points now, not where the camera last drew.
+        const wanted = Math.atan2(-(to.x - me.x), -(to.z - me.z));
+        let delta = (wanted - window.__sfDebug.lookYaw()) % (Math.PI * 2);
+        if (delta > Math.PI) delta -= Math.PI * 2;
+        if (delta < -Math.PI) delta += Math.PI * 2;
+        const sensitivity =
+            Number(window.localStorage.getItem("sf_sensitivity")) || 0.0022;
+        window.dispatchEvent(
+            new MouseEvent("mousemove", { movementX: -delta / sensitivity, movementY: 0 }),
+        );
+    }, target);
+    return advance(page, "w", metres, timeoutMs);
 }
 
 /** One line describing where the shooter is, where it is pointing, and
@@ -409,18 +514,23 @@ test.describe("a match", () => {
                 lowest = await burstAndWatch(host, guest, 1_500);
                 if (lowest < 100) break;
 
-                /* Nothing landed, so cover is in the way. Close in, and
-                 * judge that by the RANGE to the opponent rather than by
-                 * ground covered: walking into a wall slides along it,
-                 * which covers plenty of ground while getting no nearer,
-                 * and a shooter that mistakes the two grinds into a
-                 * corner. When the range stops falling, sidestep to look
-                 * for the way around, alternating sides so a wall cannot
-                 * pin it against the same edge twice. */
+                /* Nothing landed, so a wall is in the line. Route to the
+                 * arena's nearest way through and cross there, rather
+                 * than strafing inside the spawn quarter trading one
+                 * blocking wall for another (#20). While crossing, ground
+                 * is deliberately traded sideways to reach a gap, so the
+                 * range is allowed to rise; only the closing walk is
+                 * judged by RANGE, because there walking into a wall
+                 * slides along it, covering ground while getting no
+                 * nearer. When a close stalls, sidestep to find the way
+                 * around, alternating sides so a wall cannot pin the
+                 * shooter against the same edge twice. */
+                const plan = await planApproach(host);
+                if (!plan) continue;
                 const rangeBefore = await rangeToOpponent(host);
-                await advance(host, "w", 3, 5_000);
+                await walkToward(host, plan, plan.crossing ? 6 : 3, 6_000);
                 const rangeAfter = await rangeToOpponent(host);
-                if (!(rangeAfter < rangeBefore - 1)) {
+                if (!plan.crossing && !(rangeAfter < rangeBefore - 1)) {
                     await advance(host, sidestep, 4, 5_000);
                     sidestep = sidestep === "d" ? "a" : "d";
                 }

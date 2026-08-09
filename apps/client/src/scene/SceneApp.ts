@@ -569,6 +569,12 @@ export function createSceneApp(): SceneApp {
                 room
                     ? { min: room.arena.bounds_min, max: room.arena.bounds_max }
                     : null,
+            /* The cover the server sent, box for box, so a harness can
+             * route against the arena's own layout rather than carry a
+             * copy of it. Same reasoning as `bounds()`: the map is the
+             * server's to say, and a test that hard-codes it silently
+             * lies the day the layout is redrawn. */
+            cover: () => (room ? room.arena.cover.map((c) => ({ ...c })) : []),
             state: () => room?.state ?? null,
             localId: () => localPlayerId,
             /* This client's own hit points, as the server last sent them.
