@@ -15,7 +15,13 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
-from shoot4fun_backend.domain.constants import MAX_PLAYER_HP
+from shoot4fun_backend.domain.constants import (
+    MAX_PLAYER_HP,
+    PLAYER_CROUCH_EYE_HEIGHT,
+    PLAYER_CROUCH_HEIGHT,
+    PLAYER_EYE_HEIGHT,
+    PLAYER_HEIGHT,
+)
 from shoot4fun_backend.domain.model.player_health import PlayerHealth
 from shoot4fun_backend.domain.model.vec3 import Vec3
 from shoot4fun_backend.domain.model.weapon import DEFAULT_WEAPONS, WEAPON_RIFLE, Weapon
@@ -54,6 +60,12 @@ class Player:
     reload_ends_at: float | None = None
     last_input_seq: int = 0
     sim_budget: float = 0.0
+    vy: float = 0.0
+    """Vertical velocity, the server's half of the predicted jump arc
+    (`movement`, issue #10). Never authored by the client."""
+    crouching: bool = False
+    """Whether the player is ducked this frame, which lowers their eye
+    and hit capsule (`hitscan`, issue #10)."""
 
     @staticmethod
     def new(name: str, position: Vec3, team: int = 1) -> Player:
@@ -69,6 +81,16 @@ class Player:
     @property
     def weapon(self) -> Weapon:
         return DEFAULT_WEAPONS.get(self.equipped_weapon, WEAPON_RIFLE)
+
+    @property
+    def eye_height(self) -> float:
+        """Height of the camera and shot origin above the feet."""
+        return PLAYER_CROUCH_EYE_HEIGHT if self.crouching else PLAYER_EYE_HEIGHT
+
+    @property
+    def capsule_height(self) -> float:
+        """Height of the hittable body above the feet."""
+        return PLAYER_CROUCH_HEIGHT if self.crouching else PLAYER_HEIGHT
 
     @property
     def is_reloading(self) -> bool:
@@ -131,6 +153,8 @@ class Player:
         self.ammo = self.weapon.magazine_size
         self.reload_ends_at = None
         self.sim_budget = 0.0
+        self.vy = 0.0
+        self.crouching = False
 
     def to_dict(self) -> dict:
         return {
@@ -152,4 +176,5 @@ class Player:
             "magazine_size": self.weapon.magazine_size,
             "is_reloading": self.is_reloading,
             "last_input_seq": self.last_input_seq,
+            "crouching": self.crouching,
         }

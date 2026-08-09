@@ -18,6 +18,7 @@ import { PLAYER_RADIUS } from "../src/sim/movement";
 interface DebugSurface {
     camera(): { yaw: number; pitch: number };
     position(): { x: number; y: number; z: number };
+    eyeHeight(): number;
     correction(): number;
     locked(): boolean;
     remoteCount(): number;
@@ -671,6 +672,42 @@ test.describe("a match", () => {
             await host.waitForTimeout(600);
             const afterRelease = await positionOf(host);
             expect(distanceFrom(atRelease, afterRelease)).toBeLessThan(0.35);
+
+            // Jump (issue #10). Holding Space bounces a grounded player off
+            // the floor, so the feet rise above the ground; the arc is
+            // predicted, so it shows without waiting for the server. Poll
+            // for the rise rather than time it: on a software renderer the
+            // frames are sparse, but a held jump re-fires every time it
+            // lands, so one will be caught in the air.
+            await host.keyboard.down("Space");
+            await expect
+                .poll(async () => (await positionOf(host)).y, { timeout: 30_000 })
+                .toBeGreaterThan(0.2);
+            // Releasing it, the player settles back onto the ground.
+            await host.keyboard.up("Space");
+            await expect
+                .poll(async () => (await positionOf(host)).y, { timeout: 30_000 })
+                .toBeLessThan(0.05);
+
+            // Crouch (issue #10). Holding the crouch key drops the eye well
+            // below standing height; releasing it raises the eye back. The
+            // eye height is read off the real camera rig, not a constant.
+            const standingEye = await host.evaluate(() =>
+                window.__sfDebug.eyeHeight(),
+            );
+            expect(standingEye).toBeGreaterThan(1.4);
+            await host.keyboard.down("c");
+            await expect
+                .poll(async () => host.evaluate(() => window.__sfDebug.eyeHeight()), {
+                    timeout: 30_000,
+                })
+                .toBeLessThan(standingEye - 0.3);
+            await host.keyboard.up("c");
+            await expect
+                .poll(async () => host.evaluate(() => window.__sfDebug.eyeHeight()), {
+                    timeout: 30_000,
+                })
+                .toBeGreaterThan(standingEye - 0.05);
         },
     );
 

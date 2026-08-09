@@ -66,10 +66,10 @@ INT-002:
   criticality: critical
 
 INT-003:
-  version: 1.1.0
+  version: 1.2.0
   status: active
-  statement: "Holding W, A, S or D walks the player across the arena's flat ground at 6 m/s in the direction their yaw defines; releasing every key stops motion on the next frame. The server integrates that motion from the input frame's buttons, yaw and dt, and the client predicts it with the same routine."
-  rationale: "WASD-on-a-flat-plane is the literal definition of the `MOV-001` ask; anything else (jump, sprint, swim) is scope creep that has not been priced."
+  statement: "Holding W, A, S or D walks the player across the arena's ground at 6 m/s in the direction their yaw defines; releasing every key stops motion on the next frame. Holding jump gives a grounded player an upward velocity that gravity arcs back to the ground (held-to-bounce, since the routine keeps no key edge), and holding crouch drops them to a ducked stance that walks at half speed and lowers the eye and hit capsule below standing cover. The server integrates all of this from the input frame's buttons, yaw and dt, and the client predicts it with the same routine."
+  rationale: "MOV-001's WASD-on-a-flat-plane is the floor of the movement contract; jump and crouch (issue #10) are the one piece of vertical motion a shooter needs, priced here and threaded through the same stateless routine both runtimes share so prediction and the shared trace (ADR-0004) still hold. Nothing vertical crosses the wire: jump and crouch are buttons, the server owns the resulting height (INT-009)."
   derived_from: MOV-001
   test:
     scope: e2e

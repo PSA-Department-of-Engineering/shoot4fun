@@ -6,11 +6,11 @@ movement keys were held, whether jump or crouch were held, where the
 player was looking, whether the trigger was down, and how long the
 frame covered.
 
-`jump` and `crouch` are carried but not yet integrated into the
-movement routine: `movement.step` reads them nowhere, so motion stays
-flat (`INT-003`). Standing the vertical simulation up is delivery-scale
-work (see issue #10); this is the input contract it will read from, in
-place ahead of it so the client and the wire already speak it.
+`jump` and `crouch` are the vertical intent `movement.step` reads to
+give the player an upward velocity and a ducked stance (`INT-003`, issue
+#10). They are buttons like any other: the client sends what the human
+held, and the server integrates the effect, so no position, velocity or
+height ever crosses the wire (`INT-009`).
 
 `seq` is the client's monotonic frame counter. The server echoes the
 last one it consumed in every snapshot, which is what lets the client

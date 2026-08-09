@@ -37,6 +37,10 @@ export interface PlayerWire {
     /** The last input frame the server consumed from this player. The
      * local player reads it to know what to replay (ADR-0004). */
     last_input_seq: number;
+    /** Whether the player is crouched (issue #10). Authoritative server
+     * state, like position: the client renders it, never authors it.
+     * Feet height rides in `position.y`; only the stance is separate. */
+    crouching?: boolean;
 }
 
 export interface CoverBoxWire {
@@ -82,11 +86,10 @@ export interface InputWire {
         left: boolean;
         right: boolean;
         fire: boolean;
-        /** Jump and crouch intent. Carried on the wire and parsed by the
-         * server's `InputFrame`, but read by no movement routine yet:
-         * motion stays flat (INT-003). The vertical simulation they will
-         * drive is delivery-scale work (issue #10); this is the contract
-         * it reads from, in place ahead of it. */
+        /** Jump and crouch intent (issue #10). Buttons like any other:
+         * the shared movement routine reads them to give the player an
+         * upward velocity and a ducked stance. No height or velocity
+         * crosses the wire — the server integrates the effect (INT-009). */
         jump: boolean;
         crouch: boolean;
     };

@@ -15,12 +15,23 @@
  * separation is deliberately absent: the client cannot see where other
  * players are at the tick it is simulating, so the server applies it
  * afterwards and reconciliation corrects the difference.
+ *
+ * Vertical motion (issue #10) lives here for the same reason walking
+ * does: a player must see their own jump the instant they press it. The
+ * state therefore carries a vertical velocity (`vy`) so a jump arc
+ * integrates across frames; nothing vertical crosses the wire.
  */
 
 export const MOVE_SPEED = 6.0;
+export const CROUCH_SPEED_FACTOR = 0.5;
+export const GRAVITY = 20.0;
+export const JUMP_SPEED = 7.0;
+export const GROUND_Y = 0.0;
 export const MAX_FRAME_DT = 0.05;
 export const PLAYER_RADIUS = 0.45;
 export const PITCH_LIMIT = Math.PI / 2 - 0.05;
+
+const GROUND_EPS = 1e-9;
 
 export interface Vec3Like {
     x: number;
@@ -49,17 +60,66 @@ export interface MoveIntent {
     back: boolean;
     left: boolean;
     right: boolean;
+    jump: boolean;
+    crouch: boolean;
 }
 
-/** The next position for a player at `position` who sent `frame`. */
-export function step(position: Vec3Like, frame: MoveIntent, arena: ArenaLike): Vec3Like {
+/** Everything the routine carries between frames: feet, and the vertical
+ * velocity that makes a jump an arc. The mirror of the server's
+ * `MoveState`. */
+export interface MoveState {
+    position: Vec3Like;
+    vy: number;
+}
+
+/** The next movement state for a player who sent `frame`. */
+export function step(state: MoveState, frame: MoveIntent, arena: ArenaLike): MoveState {
     let dt = frame.dt;
-    if (dt <= 0) return position;
+    if (dt <= 0) return state;
     if (dt > MAX_FRAME_DT) dt = MAX_FRAME_DT;
 
+    const position = state.position;
+    let vy = state.vy;
+    const grounded = position.y <= GROUND_Y + GROUND_EPS && vy <= 0;
+    // Crouch is a grounded stance; you cannot duck in mid-air, and holding
+    // crouch keeps you planted (it suppresses the jump below).
+    const crouching = frame.crouch && grounded;
+
+    const [x, z] = horizontal(position, frame, arena, dt, crouching);
+
+    // Vertical: jump impulse, gravity, and the landing. Held-to-bounce,
+    // because the routine keeps no key-press edge.
+    let y = position.y;
+    let airborne = !grounded;
+    if (grounded && frame.jump && !crouching) {
+        vy = JUMP_SPEED;
+        airborne = true;
+    }
+    if (!airborne) {
+        y = GROUND_Y;
+        vy = 0;
+    } else {
+        vy -= GRAVITY * dt;
+        y += vy * dt;
+        if (y <= GROUND_Y) {
+            y = GROUND_Y;
+            vy = 0;
+        }
+    }
+
+    return { position: { x, y, z }, vy };
+}
+
+function horizontal(
+    position: Vec3Like,
+    frame: MoveIntent,
+    arena: ArenaLike,
+    dt: number,
+    crouching: boolean,
+): [number, number] {
     const forward = (frame.forward ? 1 : 0) - (frame.back ? 1 : 0);
     const strafe = (frame.right ? 1 : 0) - (frame.left ? 1 : 0);
-    if (forward === 0 && strafe === 0) return position;
+    if (forward === 0 && strafe === 0) return [position.x, position.z];
 
     // Forward is -Z rotated about Y, right is +X rotated about Y: the
     // renderer's own convention, so what you look at is what you walk
@@ -75,7 +135,8 @@ export function step(position: Vec3Like, frame: MoveIntent, arena: ArenaLike): V
         dz /= length;
     }
 
-    const distance = MOVE_SPEED * dt;
+    const speed = MOVE_SPEED * (crouching ? CROUCH_SPEED_FACTOR : 1);
+    const distance = speed * dt;
     let x = position.x + dx * distance;
     let z = position.z + dz * distance;
 
@@ -84,7 +145,7 @@ export function step(position: Vec3Like, frame: MoveIntent, arena: ArenaLike): V
     for (const box of arena.cover) {
         [x, z] = pushOutOf(x, z, box);
     }
-    return { x, y: position.y, z };
+    return [x, z];
 }
 
 function clampToBounds(x: number, z: number, arena: ArenaLike): [number, number] {

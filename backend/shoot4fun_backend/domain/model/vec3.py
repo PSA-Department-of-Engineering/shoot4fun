@@ -1,9 +1,9 @@
 """3-component float vector (the geometry primitive on the server).
 
-The server-side world is a flat plane: players have an (x, z) position
-on the ground; the (y) component is always the player capsule's
-vertical (1.0 for the spawn, 0.0 for the ground). A 3-tuple is the
-smallest value object that carries the data and stays JSON-serializable.
+Players move on the (x, z) ground plane; the (y) component is their feet
+height, `0.0` on the ground and lifted while a jump is in the air (issue
+#10). A 3-tuple is the smallest value object that carries the data and
+stays JSON-serializable.
 """
 from __future__ import annotations
 

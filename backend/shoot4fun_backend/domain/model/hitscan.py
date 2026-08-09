@@ -7,9 +7,12 @@ client can send to choose a victim.
 Geometry:
 
 * **Players are vertical capsules**, approximated as a cylinder of
-  `PLAYER_RADIUS` spanning the ground to `PLAYER_HEIGHT` at the
-  player's feet. A hit above `HEAD_HEIGHT` is a headshot and multiplies
-  damage.
+  `PLAYER_RADIUS` spanning the ground to the target's capsule height at
+  its feet. A standing capsule reaches `PLAYER_HEIGHT`; a crouched one
+  is shorter (issue #10), so a duck behind waist-high cover puts the
+  whole body below a ray that would clear a standing one. A hit in the
+  top of the capsule (`HEAD_FRACTION` of its height) is a headshot and
+  multiplies damage, so the headshot line drops with the crouch.
 * **Cover is a full 3D box.** `movement` reads the same boxes flat, so
   a waist-high crate stops a body shot at close range, blocks nothing
   aimed above it, and is impassable on foot either way.
@@ -32,8 +35,10 @@ from shoot4fun_backend.domain.model.vec3 import Vec3
 __all__ = [
     "BULLET_RANGE",
     "HEADSHOT_MULTIPLIER",
+    "HEAD_FRACTION",
     "HEAD_HEIGHT",
     "HitResult",
+    "TargetGeom",
     "eye_of",
     "look_direction",
     "resolve",
@@ -44,9 +49,28 @@ BULLET_RANGE: float = 80.0
 """Metres a shot carries. Beyond this the ray simply misses."""
 
 HEAD_HEIGHT: float = 1.45
-"""Height above the feet at which a hit counts as a headshot."""
+"""Height above the feet at which a hit on a standing player counts as a
+headshot. Kept as the named constant it always was; the crouch case
+reads the fraction it represents instead (`HEAD_FRACTION`)."""
+
+HEAD_FRACTION: float = HEAD_HEIGHT / PLAYER_HEIGHT
+"""The headshot line as a fraction of capsule height, so it scales with
+a crouch. At the standing height it is exactly `HEAD_HEIGHT`."""
 
 HEADSHOT_MULTIPLIER: float = 2.0
+
+
+@dataclass(frozen=True, slots=True)
+class TargetGeom:
+    """A hittable player: where its feet are, and how tall it stands.
+
+    Carrying the height here (rather than assuming `PLAYER_HEIGHT`) is
+    what lets a crouched player present a shorter capsule, and lets the
+    rewind carry the stance the shooter actually saw (issue #10).
+    """
+
+    feet: Vec3
+    height: float = PLAYER_HEIGHT
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,28 +95,32 @@ def look_direction(yaw: float, pitch: float) -> Vec3:
     )
 
 
-def eye_of(position: Vec3) -> Vec3:
-    """The shot origin for a player standing at `position`."""
-    return Vec3(position.x, position.y + PLAYER_EYE_HEIGHT, position.z)
+def eye_of(position: Vec3, eye_height: float = PLAYER_EYE_HEIGHT) -> Vec3:
+    """The shot origin for a player whose feet are at `position`.
+
+    `eye_height` defaults to standing; a crouched shooter passes their
+    lower eye, so their own shots leave from where their camera is.
+    """
+    return Vec3(position.x, position.y + eye_height, position.z)
 
 
 def resolve(
     origin: Vec3,
     direction: Vec3,
-    targets: dict[str, Vec3],
+    targets: dict[str, TargetGeom],
     arena: Arena,
     max_range: float = BULLET_RANGE,
 ) -> HitResult | None:
     """Nearest player hit along the ray, or None if blocked or missed.
 
-    `targets` maps player id to feet position and must already exclude
-    the shooter and the dead.
+    `targets` maps player id to the target's feet and capsule height and
+    must already exclude the shooter and the dead.
     """
     blocking = _nearest_cover(origin, direction, arena, max_range)
 
     best: HitResult | None = None
-    for target_id, feet in targets.items():
-        hit = _cylinder_hit(origin, direction, feet, max_range)
+    for target_id, geom in targets.items():
+        hit = _cylinder_hit(origin, direction, geom.feet, geom.height, max_range)
         if hit is None:
             continue
         distance, point = hit
@@ -103,7 +131,7 @@ def resolve(
                 target_id=target_id,
                 distance=distance,
                 point=point,
-                is_headshot=(point.y - feet.y) >= HEAD_HEIGHT,
+                is_headshot=(point.y - geom.feet.y) >= geom.height * HEAD_FRACTION,
             )
     return best
 
@@ -152,9 +180,9 @@ def _box_hit(
 
 
 def _cylinder_hit(
-    origin: Vec3, direction: Vec3, feet: Vec3, max_range: float
+    origin: Vec3, direction: Vec3, feet: Vec3, height: float, max_range: float
 ) -> tuple[float, Vec3] | None:
-    """Ray versus the vertical cylinder standing on `feet`."""
+    """Ray versus the vertical cylinder of `height` standing on `feet`."""
     ox = origin.x - feet.x
     oz = origin.z - feet.z
     a = direction.x * direction.x + direction.z * direction.z
@@ -176,7 +204,7 @@ def _cylinder_hit(
         return None
 
     y = origin.y + direction.y * distance
-    if y < feet.y or y > feet.y + PLAYER_HEIGHT:
+    if y < feet.y or y > feet.y + height:
         return None
     return distance, Vec3(
         origin.x + direction.x * distance,
