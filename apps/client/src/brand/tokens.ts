@@ -64,6 +64,9 @@ export const SCENE_COLORS = {
     // cover a player is reading for sightlines.
     arenaWall: hslToHex("200 8% 52%"),
     arenaSky: hslToHex("210 30% 88%"),
+    // The solo aim-training target (issue #15): a hot orange sphere that
+    // reads against the muted ground and cover from across the range.
+    trainingTarget: hslToHex("14 90% 56%"),
     muzzleFlash: hslToHex("50 100% 70%"),
     hitIndicator: hslToHex("50 100% 55%"),
     bullet: hslToHex("50 100% 70%"),

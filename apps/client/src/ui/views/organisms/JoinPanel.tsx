@@ -29,6 +29,7 @@ export const JoinPanel = () => {
     const setRoomCode = useSession((s) => s.setRoomCode);
     const createRoom = useSession((s) => s.createRoom);
     const joinRoom = useSession((s) => s.joinRoom);
+    const enterSolo = useSession((s) => s.enterSolo);
 
     const busy = phase === "joining";
 
@@ -82,6 +83,22 @@ export const JoinPanel = () => {
 
             <Button type="submit" block disabled={!canJoin} data-join-room>
                 Join room
+            </Button>
+
+            <div className="join__divider">
+                <span>or practise alone</span>
+            </div>
+
+            {/* Solo needs neither a name nor a room: the range runs on the
+                client (issue #15), so this is always live. */}
+            <Button
+                type="button"
+                variant="ghost"
+                block
+                onClick={() => enterSolo()}
+                data-solo
+            >
+                Solo target practice
             </Button>
 
             {error ? (

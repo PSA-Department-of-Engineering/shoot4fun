@@ -18,8 +18,10 @@
 import type { TouchInput } from "@/input/InputController";
 import { MatchClient, type ConnectionStatus } from "@/net/MatchClient";
 import type { PlayerWire, RoomSnapshot } from "@/net/protocol";
-import { createSceneApp, type SceneApp } from "@/scene/SceneApp";
+import { createSceneApp, type SceneApp, type TrainingUpdate } from "@/scene/SceneApp";
 import { Hud } from "@/ui/hud/Hud";
+
+export type { TrainingUpdate };
 
 export type { ConnectionStatus };
 
@@ -43,8 +45,16 @@ export interface GameRuntime {
     selectMap(arenaId: string): void;
     startMatch(): void;
     rematch(): void;
+    /** Enter the solo aim-training range (issue #15): the scene runs the
+     * range and the HUD switches to its counters until `exitTraining`. */
+    enterTraining(): void;
+    /** Leave the range, free the mouse, and dim the HUD. */
+    exitTraining(): void;
     /** Ask for pointer lock. Only meaningful inside a user gesture. */
     requestLock(): Promise<boolean>;
+    /** Drop pointer lock, so a menu can take the mouse (the solo results
+     * card needs the cursor back). */
+    releaseLock(): void;
     isLocked(): boolean;
     /** The touch layout's input channel (issue #17), for the on-screen
      * controls a mobile player drives instead of mouse and keyboard. */
@@ -59,6 +69,9 @@ export interface GameRuntime {
     onStatus(cb: (status: ConnectionStatus) => void): () => void;
     onLockedChange(cb: (locked: boolean) => void): () => void;
     onServerError(cb: (error: ServerError) => void): () => void;
+    /** Live solo-range counters and the end-of-round flag, each drawn
+     * frame while the range runs. */
+    onTraining(cb: (update: TrainingUpdate) => void): () => void;
 }
 
 function createGameRuntime(): GameRuntime {
@@ -68,6 +81,7 @@ function createGameRuntime(): GameRuntime {
     const localListeners = new Set<(player: PlayerWire) => void>();
     const statusListeners = new Set<(status: ConnectionStatus) => void>();
     const errorListeners = new Set<(error: ServerError) => void>();
+    const trainingListeners = new Set<(update: TrainingUpdate) => void>();
 
     let sceneHost: HTMLElement | null = null;
     let hud: Hud | null = null;
@@ -79,6 +93,9 @@ function createGameRuntime(): GameRuntime {
      * a default 100 hit points over a dying player is a lie. */
     let lastSnapshot: RoomSnapshot | null = null;
     let localPlayerId = "";
+    /* Whether the solo range is on, kept so a HUD remounted mid-range
+     * comes back into its solo layout rather than the match one. */
+    let soloActive = false;
 
     scene.onState((room) => {
         lastSnapshot = room;
@@ -99,6 +116,13 @@ function createGameRuntime(): GameRuntime {
      * the bearing of whoever fired becomes an arrow around the crosshair. */
     scene.onDamaged((direction) => hud?.flashHit(direction));
 
+    /* The solo range writes its counters into the same imperative HUD the
+     * match uses, and hands the end-of-round flag out to the overlay. */
+    scene.onTraining((update) => {
+        hud?.updateTraining(update.stats);
+        for (const listener of trainingListeners) listener(update);
+    });
+
     return {
         attachScene(host) {
             /* A WebGL context is expensive and single: mounting is done
@@ -117,7 +141,9 @@ function createGameRuntime(): GameRuntime {
             hud?.destroy();
             hud = new Hud(host);
             if (localPlayerId) hud.setLocalPlayer(localPlayerId);
-            if (lastSnapshot) {
+            if (soloActive) {
+                hud.setSoloActive(true);
+            } else if (lastSnapshot) {
                 hud.setActive(lastSnapshot.state === "playing");
                 hud.update(lastSnapshot);
             }
@@ -153,8 +179,22 @@ function createGameRuntime(): GameRuntime {
         rematch() {
             client?.rematch();
         },
+        enterTraining() {
+            soloActive = true;
+            hud?.setSoloActive(true);
+            scene.enterTraining();
+        },
+        exitTraining() {
+            scene.exitTraining();
+            scene.releaseLock();
+            soloActive = false;
+            hud?.setSoloActive(false);
+        },
         requestLock() {
             return scene.requestLock();
+        },
+        releaseLock() {
+            scene.releaseLock();
         },
         isLocked() {
             return scene.isLocked();
@@ -187,6 +227,10 @@ function createGameRuntime(): GameRuntime {
         onServerError(cb) {
             errorListeners.add(cb);
             return () => errorListeners.delete(cb);
+        },
+        onTraining(cb) {
+            trainingListeners.add(cb);
+            return () => trainingListeners.delete(cb);
         },
     };
 }

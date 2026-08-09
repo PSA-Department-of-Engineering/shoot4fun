@@ -30,6 +30,9 @@ export const selectLatencyMs = (s: SessionState): number => s.latencyMs;
 export const selectError = (s: SessionState): string | null => s.error;
 export const selectInviteCopied = (s: SessionState): boolean => s.inviteCopied;
 
+/** Whether the solo aim-training range is on (issue #15). */
+export const selectSolo = (s: SessionState): boolean => s.solo;
+
 export const selectIsOnline = (s: SessionState): boolean => s.connection === "open";
 
 /** A name is anything non-blank; the server truncates, so we bound it too. */

@@ -37,6 +37,11 @@ interface SessionActions {
     /** Follow a room change that came from the URL rather than the form. */
     followUrl: () => void;
     copyInvite: () => Promise<void>;
+    /** Enter the solo aim-training range (issue #15). No room, no socket:
+     * the range runs entirely on the client. */
+    enterSolo: () => void;
+    /** Leave the range and return to the entry screen. */
+    exitSolo: () => void;
     noteStatus: (status: ConnectionStatus) => void;
     noteLatency: (latencyMs: number) => void;
     noteServerError: (error: ServerError) => void;
@@ -83,6 +88,7 @@ export const useSession = create<SessionState & SessionActions>()((set, get) => 
     latencyMs: 0,
     error: null,
     inviteCopied: false,
+    solo: false,
 
     hydrate: () => {
         const playerName = readStoredName();
@@ -147,6 +153,16 @@ export const useSession = create<SessionState & SessionActions>()((set, get) => 
             // to be read out either way.
             set({ inviteCopied: false });
         }
+    },
+
+    enterSolo: () => {
+        getGameRuntime().enterTraining();
+        set({ solo: true });
+    },
+
+    exitSolo: () => {
+        getGameRuntime().exitTraining();
+        set({ solo: false });
     },
 
     /* A dropped socket leaves the player where they were, told the truth

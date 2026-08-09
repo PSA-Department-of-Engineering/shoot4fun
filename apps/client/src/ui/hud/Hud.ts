@@ -14,6 +14,7 @@
  */
 
 import type { PlayerWire, RoomSnapshot } from "@/net/protocol";
+import type { SessionStats } from "@/training/session";
 
 import { ENDING_SECONDS, formatClock } from "./clock";
 
@@ -30,6 +31,10 @@ export class Hud {
     private respawn: HTMLElement;
     private hitIndicator: HTMLElement;
     private hitMarker: HTMLElement;
+    private soloScore: HTMLElement;
+    private soloHits: HTMLElement;
+    private soloAccuracy: HTMLElement;
+    private soloStreak: HTMLElement;
     private localId: string | null = null;
     private hitAt: number = 0;
     private hitMarkerAt: number = 0;
@@ -78,7 +83,28 @@ export class Hud {
             </svg>
             <div class="hud-respawn" data-respawn>RESPAWNING IN 3...</div>
             <div class="hud-hit" data-hit></div>
+            <div class="hud-solo" data-solo>
+                <div class="hud-solo-metric">
+                    <div class="hud-secondary">SCORE</div>
+                    <div class="hud-number" data-solo-score>0</div>
+                </div>
+                <div class="hud-solo-metric">
+                    <div class="hud-secondary">HITS</div>
+                    <div class="hud-number hud-number-small" data-solo-hits>0</div>
+                </div>
+                <div class="hud-solo-metric">
+                    <div class="hud-secondary">ACCURACY</div>
+                    <div class="hud-number hud-number-small" data-solo-accuracy>0%</div>
+                </div>
+                <div class="hud-solo-metric">
+                    <div class="hud-secondary">STREAK</div>
+                    <div class="hud-number hud-number-small" data-solo-streak>0</div>
+                </div>
+            </div>
         `;
+        // The HUD carries both layouts and shows one: the match blocks, or
+        // the solo range's counters (issue #15).
+        this.root.dataset.mode = "match";
         parent.appendChild(this.root);
         this.healthFill = this.root.querySelector("[data-health-fill]")!;
         this.healthNumber = this.root.querySelector("[data-health-number]")!;
@@ -88,6 +114,10 @@ export class Hud {
         this.respawn = this.root.querySelector("[data-respawn]")!;
         this.hitIndicator = this.root.querySelector("[data-hit]")!;
         this.hitMarker = this.root.querySelector("[data-hitmarker]")!;
+        this.soloScore = this.root.querySelector("[data-solo-score]")!;
+        this.soloHits = this.root.querySelector("[data-solo-hits]")!;
+        this.soloAccuracy = this.root.querySelector("[data-solo-accuracy]")!;
+        this.soloStreak = this.root.querySelector("[data-solo-streak]")!;
     }
 
     setLocalPlayer(id: string): void {
@@ -98,6 +128,29 @@ export class Hud {
      * measurable, but a crosshair floating over a menu is noise. */
     setActive(active: boolean): void {
         this.root.dataset.active = String(active);
+    }
+
+    /* Enter or leave the solo range's layout (issue #15): the match's
+     * health, ammo and kill/death blocks give way to the range's score,
+     * hits, accuracy and streak, and the HUD is lit while the range runs
+     * and dimmed when it is left. */
+    setSoloActive(active: boolean): void {
+        this.root.dataset.mode = active ? "solo" : "match";
+        this.root.dataset.active = String(active);
+        if (!active) this.timer.dataset.visible = "false";
+    }
+
+    /** Write the solo range's live counters. Called once per drawn frame
+     * while the range runs; the timer is the round's own countdown. */
+    updateTraining(stats: SessionStats): void {
+        this.soloScore.textContent = String(stats.score);
+        this.soloHits.textContent = String(stats.hits);
+        this.soloAccuracy.textContent = `${Math.round(stats.accuracy * 100)}%`;
+        this.soloStreak.textContent = String(stats.streak);
+        const seconds = stats.remainingMs / 1000;
+        this.timer.dataset.visible = "true";
+        this.timer.textContent = formatClock(seconds);
+        this.timer.dataset.ending = String(seconds <= ENDING_SECONDS);
     }
 
     flashHit(direction: number = 0): void {

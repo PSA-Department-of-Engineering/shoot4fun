@@ -35,9 +35,15 @@ import * as THREE from "three";
 import { AudioEngine } from "../audio/AudioEngine";
 import { HapticsEngine } from "../haptics/HapticsEngine";
 import { SCENE_COLORS } from "../brand/tokens";
-import { InputController, type TouchInput } from "../input/InputController";
+import { InputController, type InputSnapshot, type TouchInput } from "../input/InputController";
 import type { MatchClient } from "../net/MatchClient";
 import type { ArenaWire, PlayerWire, RoomSnapshot } from "../net/protocol";
+import {
+    DEFAULT_TRAINING_CONFIG,
+    TrainingSession,
+    type SessionStats,
+    type TrainingConfig,
+} from "../training/session";
 import { Predictor } from "../sim/Predictor";
 import { SnapshotBuffer } from "../sim/SnapshotBuffer";
 import { MAX_FRAME_DT, clampPitch, type ArenaLike, type Vec3Like } from "../sim/movement";
@@ -77,6 +83,34 @@ const TELEPORT_METRES = 2;
 const MATCH_START_HORN = [392, 523, 659];
 const MATCH_END_STING = [659, 523, 392];
 
+/* The solo aim-training range (issue #15), as the client draws it. It
+ * mirrors the server's `ARENA_AIMLABS` layout so the room looks the same
+ * whether a lone player drills targets in it here or a match is ever set
+ * on it — but the range needs no server: the targets are spawned and
+ * scored on the client (see `TrainingSession`). The single spawn stands
+ * at the near edge looking out across the field the targets appear in. */
+const TRAINING_SPAWN = { x: 0, z: 9 };
+const AIM_ROOM: ArenaWire = {
+    id: "aimlabs",
+    name: "Aim Lab",
+    bounds_min: { x: -12, y: 0, z: -12 },
+    bounds_max: { x: 12, y: 0, z: 12 },
+    cover: [
+        { center: { x: -8, y: 0.5, z: -8 }, half_x: 1, half_y: 0.5, half_z: 1 },
+        { center: { x: 8, y: 0.5, z: -8 }, half_x: 1, half_y: 0.5, half_z: 1 },
+        { center: { x: -8, y: 0.5, z: 8 }, half_x: 1, half_y: 0.5, half_z: 1 },
+        { center: { x: 8, y: 0.5, z: 8 }, half_x: 1, half_y: 0.5, half_z: 1 },
+    ],
+    spawn_points: [{ x: TRAINING_SPAWN.x, y: 0, z: TRAINING_SPAWN.z }],
+};
+
+/** One frame's worth of the solo range, pushed to the HUD and the solo
+ * overlay: the live counters, and whether the round is over. */
+export interface TrainingUpdate {
+    stats: SessionStats;
+    ended: boolean;
+}
+
 export interface SceneApp {
     mount(container: HTMLElement): void;
     start(): void;
@@ -87,6 +121,8 @@ export interface SceneApp {
     onLocalPlayer(cb: (player: PlayerWire) => void): () => void;
     /** Ask for pointer lock. Must run inside a user gesture. */
     requestLock(): Promise<boolean>;
+    /** Drop pointer lock, so the mouse is free for a menu. */
+    releaseLock(): void;
     isLocked(): boolean;
     onLockedChange(cb: (locked: boolean) => void): () => void;
     /** The touch layout's input channel (issue #17). Feeds the same
@@ -102,6 +138,16 @@ export interface SceneApp {
      * right, which is what a directional damage indicator needs.
      * `severity` is the damage as a fraction of full health. */
     onDamaged(cb: (direction: number, severity: number) => void): () => void;
+    /** Enter the solo aim-training range (issue #15): build the room,
+     * start a fresh session, and stand the player at its spawn. The
+     * frame loop then runs the range instead of the match until
+     * `exitTraining`. */
+    enterTraining(config?: TrainingConfig): void;
+    /** Leave the range and end any running session. */
+    exitTraining(): void;
+    /** Live counters and the end-of-round flag, once per drawn frame
+     * while the range is running. */
+    onTraining(cb: (update: TrainingUpdate) => void): () => void;
 }
 
 export function createSceneApp(): SceneApp {
@@ -181,6 +227,33 @@ export function createSceneApp(): SceneApp {
     /** What a shot may touch: the arena, and the bodies standing in it. */
     const shotTargets: THREE.Object3D[] = [ground, coverGroup, playersGroup];
 
+    /* The solo aim-training range (issue #15). The targets live in a
+     * group of their own so a shot casts against them and the room
+     * together, and the meshes are mirrored from the session by id: the
+     * session owns the rules, this owns the spheres. */
+    const trainingTargets = new THREE.Group();
+    trainingTargets.name = "training-targets";
+    scene.add(trainingTargets);
+    const trainingGeometry = new THREE.SphereGeometry(1, 20, 16);
+    const trainingMaterial = new THREE.MeshStandardMaterial({
+        color: SCENE_COLORS.trainingTarget,
+        emissive: new THREE.Color(SCENE_COLORS.trainingTarget),
+        emissiveIntensity: 0.25,
+        roughness: 0.5,
+        metalness: 0.05,
+    });
+    const trainingMeshes = new Map<number, THREE.Mesh>();
+    const trainingShotTargets: THREE.Object3D[] = [trainingTargets, coverGroup, ground];
+    const trainingRay = new THREE.Raycaster();
+    trainingRay.layers.set(SHOT_LAYER);
+    const trainingHits: THREE.Intersection[] = [];
+    const trainingHandlers = new Set<(update: TrainingUpdate) => void>();
+    let training: TrainingSession | null = null;
+    /** Whether the trigger was already down last frame, so a held button
+     * fires one shot per press rather than a stream: aim is what a range
+     * trains. */
+    let trainingFiring = false;
+
     let renderer: THREE.WebGLRenderer | null = null;
     let observer: ResizeObserver | null = null;
     let host: HTMLElement | null = null;
@@ -259,6 +332,7 @@ export function createSceneApp(): SceneApp {
     const scratchForward = new THREE.Vector3();
     const scratchEye = new THREE.Vector3();
     const scratchImpact = new THREE.Vector3();
+    const scratchNormal = new THREE.Vector3();
     const scratchQuaternion = new THREE.Quaternion();
     /** Where the player stood last frame, for measuring their speed. */
     const lastLocalPosition = new THREE.Vector3();
@@ -358,6 +432,13 @@ export function createSceneApp(): SceneApp {
         const dt = Math.min(MAX_FRAME_DT * MAX_INPUT_SUBSTEPS, clock.getDelta());
         const now = performance.now();
         const sample = input.sample();
+
+        // The solo range runs its own frame and returns: no prediction,
+        // no wire, no other players (issue #15).
+        if (training) {
+            frameTraining(dt, sample);
+            return;
+        }
 
         // 1. Look is local and instant; the kick rides on top of it.
         lookYaw = sample.yaw;
@@ -531,6 +612,169 @@ export function createSceneApp(): SceneApp {
         firstPerson.muzzleWorld(scratchMuzzle, camera);
         markShot(scratchMuzzle, scratchEye, scratchForward);
         effects.holderMuzzle(scratchMuzzle, scratchForward);
+    }
+
+    /* One frame of the solo range (issue #15). It shares the match's
+     * feel — look is instant, the kick rides on top, the weapon in hand
+     * and the effects are the same — but the player stands still and the
+     * only things in the world are the targets, ticked and scored on the
+     * client. */
+    function frameTraining(dt: number, sample: InputSnapshot): void {
+        const session = training;
+        if (!session) return;
+
+        lookYaw = sample.yaw;
+        lookPitch = clampPitch(sample.pitch);
+        viewKick.update(dt);
+        camera.rotation.y = lookYaw + viewKick.yawOffset();
+        camera.rotation.x = clampPitch(lookPitch + viewKick.pitchOffset());
+        camera.rotation.z = viewKick.rollOffset();
+        camera.position.set(viewKick.shakeX(), viewKick.shakeY(), 0);
+        // Rooted at the range's spawn: the view turns, the feet do not.
+        rig.position.set(TRAINING_SPAWN.x, EYE_HEIGHT, TRAINING_SPAWN.z);
+
+        // Releasing the mouse (Esc) pauses the range: the targets and the
+        // clock hold while the player reads the gate, and resume on the
+        // next click that recaptures it.
+        const active = input.isLocked() && !session.isEnded();
+        if (active) {
+            session.tick(dt * 1000);
+            // One shot per press, and none once the round is over.
+            if (sample.fire && !trainingFiring) fireTraining();
+        }
+        trainingFiring = sample.fire;
+        syncTrainingMeshes();
+
+        firstPerson.setMotionReduced(viewKick.motionReduced);
+        firstPerson.update(dt, 0, false, true, lookYaw - lastLookYaw, lookPitch - lastLookPitch);
+        lastLookYaw = lookYaw;
+        lastLookPitch = lookPitch;
+        effects.update(dt);
+
+        if (renderer) {
+            renderer.clear();
+            renderer.render(scene, camera);
+            framesRendered += 1;
+            firstPerson.render(renderer);
+        }
+        if (host && host.dataset.sceneReady !== "true") {
+            host.dataset.sceneReady = "true";
+        }
+
+        const update: TrainingUpdate = { stats: session.stats(), ended: session.isEnded() };
+        for (const handler of trainingHandlers) handler(update);
+    }
+
+    /* One round on the range. The visuals are the holder's own shot; the
+     * scoring reads which target the ray struck, if any, and tells the
+     * session, which owns what that was worth. The cast is against the
+     * targets and the room together, so a target behind cover is occluded
+     * exactly as the eye sees it. */
+    function fireTraining(): void {
+        if (shotRange <= 0 || !training) return;
+        firstPerson.fire();
+        viewKick.recoil();
+        audio.shot();
+
+        camera.getWorldQuaternion(scratchQuaternion);
+        scratchForward.set(0, 0, -1).applyQuaternion(scratchQuaternion).normalize();
+        scratchEye.copy(rig.position);
+        firstPerson.muzzleWorld(scratchMuzzle, camera);
+        effects.holderMuzzle(scratchMuzzle, scratchForward);
+
+        trainingRay.set(scratchEye, scratchForward);
+        trainingRay.far = shotRange;
+        trainingHits.length = 0;
+        trainingRay.intersectObjects(trainingShotTargets, true, trainingHits);
+        const nearest = trainingHits[0];
+
+        let targetId: number | null = null;
+        if (nearest) {
+            scratchImpact.copy(nearest.point);
+            const id = nearest.object.userData.targetId;
+            if (typeof id === "number") targetId = id;
+        } else {
+            scratchImpact.copy(scratchEye).addScaledVector(scratchForward, shotRange);
+        }
+        effects.tracer(scratchMuzzle, scratchImpact);
+
+        if (targetId !== null) {
+            // A struck target confirms like a landed shot in a match: the
+            // hit marker and the hit chime, through the same channels.
+            audio.hit();
+            for (const handler of hitHandlers) handler(false, false);
+        } else if (nearest) {
+            if (nearest.face) {
+                scratchNormal
+                    .copy(nearest.face.normal)
+                    .transformDirection(nearest.object.matrixWorld)
+                    .normalize();
+            } else {
+                scratchNormal.copy(scratchForward).negate();
+            }
+            effects.impact(scratchImpact, scratchNormal);
+        }
+
+        training.registerShot(targetId);
+        syncTrainingMeshes();
+    }
+
+    /* Mirror the session's targets onto meshes by id: a new target gets a
+     * sphere, a gone one loses it, and the rest are moved to where they
+     * drifted. The spheres carry their target id and sit on the shot
+     * layer, so a cast finds them and reports which one it hit. */
+    function syncTrainingMeshes(): void {
+        const live = training?.targets() ?? [];
+        const seen = new Set<number>();
+        for (const target of live) {
+            seen.add(target.id);
+            let mesh = trainingMeshes.get(target.id);
+            if (!mesh) {
+                mesh = new THREE.Mesh(trainingGeometry, trainingMaterial);
+                mesh.castShadow = true;
+                mesh.layers.enable(SHOT_LAYER);
+                mesh.userData.targetId = target.id;
+                trainingTargets.add(mesh);
+                trainingMeshes.set(target.id, mesh);
+            }
+            mesh.position.set(target.x, target.y, target.z);
+            mesh.scale.setScalar(target.radius);
+        }
+        for (const [id, mesh] of trainingMeshes) {
+            if (seen.has(id)) continue;
+            trainingTargets.remove(mesh);
+            trainingMeshes.delete(id);
+        }
+    }
+
+    function enterTraining(config: TrainingConfig = DEFAULT_TRAINING_CONFIG): void {
+        // Build the range's room the same way a match arena is built, so
+        // the ground, the walls and the cover are all there and a shot
+        // has a range to run.
+        rebuildArena(AIM_ROOM);
+        training = new TrainingSession(config);
+        trainingFiring = false;
+        localAlive = true;
+        eyeHeight = EYE_HEIGHT;
+        rig.position.set(TRAINING_SPAWN.x, EYE_HEIGHT, TRAINING_SPAWN.z);
+        // Face straight into the field (yaw 0 looks down -z), level.
+        input.setLook(0, 0);
+        lookYaw = 0;
+        lookPitch = 0;
+        lastLookYaw = 0;
+        lastLookPitch = 0;
+        syncTrainingMeshes();
+    }
+
+    function exitTraining(): void {
+        training?.end();
+        training = null;
+        trainingFiring = false;
+        for (const mesh of trainingMeshes.values()) trainingTargets.remove(mesh);
+        trainingMeshes.clear();
+        // Force the next match snapshot to rebuild its own arena rather
+        // than keep the range's room.
+        arenaId = "";
     }
 
     /* One round, fired by somebody else. Their aim is interpolated like
@@ -864,6 +1108,11 @@ export function createSceneApp(): SceneApp {
             firstPerson.dispose();
             characters.dispose();
             groundTexture.dispose();
+            training = null;
+            trainingMeshes.clear();
+            trainingHandlers.clear();
+            trainingGeometry.dispose();
+            trainingMaterial.dispose();
             stateHandlers.clear();
             localHandlers.clear();
             hitHandlers.clear();
@@ -891,12 +1140,21 @@ export function createSceneApp(): SceneApp {
             damageHandlers.add(cb);
             return () => damageHandlers.delete(cb);
         },
+        enterTraining,
+        exitTraining,
+        onTraining(cb) {
+            trainingHandlers.add(cb);
+            return () => trainingHandlers.delete(cb);
+        },
         requestLock() {
             // A gesture is the only moment a browser will start audio,
             // and it is the same gesture that takes the mouse.
             audio.resume();
             audio.setStarted(true);
             return input.requestLock();
+        },
+        releaseLock() {
+            input.releaseLock();
         },
         isLocked() {
             return input.isLocked();
