@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { MAX_FRAME_DT, MOVE_SPEED, step, type ArenaLike, type MoveIntent } from "./movement";
+import { MAX_FRAME_DT, MOVE_SPEED, step, type ArenaLike, type MoveIntent, type MoveState } from "./movement";
 
 const OPEN_GROUND: ArenaLike = {
     bounds_min: { x: -100, y: 0, z: -100 },
@@ -31,16 +31,16 @@ const OPEN_GROUND: ArenaLike = {
 const START = { x: 0, y: 0, z: 0 };
 
 function walking(dt: number): MoveIntent {
-    return { dt, yaw: 0, forward: true, back: false, left: false, right: false };
+    return { dt, yaw: 0, forward: true, back: false, left: false, right: false, jump: false, crouch: false };
 }
 
 /** Travel from walking forward for `seconds`, delivered in `slices`. */
 function travel(seconds: number, slices: number): number {
-    let position = START;
+    let state: MoveState = { position: START, vy: 0 };
     for (let i = 0; i < slices; i++) {
-        position = step(position, walking(seconds / slices), OPEN_GROUND);
+        state = step(state, walking(seconds / slices), OPEN_GROUND);
     }
-    return Math.abs(position.z - START.z);
+    return Math.abs(state.position.z - START.z);
 }
 
 describe("a render frame longer than the simulation ceiling", () => {

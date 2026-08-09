@@ -27,7 +27,7 @@ sys.path.insert(0, str(_ROOT))
 
 from shoot4fun_backend.domain.model.arena import DEFAULT_ARENAS  # noqa: E402
 from shoot4fun_backend.domain.model.input_frame import InputFrame  # noqa: E402
-from shoot4fun_backend.domain.model.movement import step  # noqa: E402
+from shoot4fun_backend.domain.model.movement import MoveState, step  # noqa: E402
 from shoot4fun_backend.domain.model.vec3 import Vec3  # noqa: E402
 
 OUTPUT = _ROOT.parent / "shared" / "movement_trace.json"
@@ -51,6 +51,8 @@ def _frame(
     back: bool = False,
     left: bool = False,
     right: bool = False,
+    jump: bool = False,
+    crouch: bool = False,
 ) -> dict:
     return {
         "dt": dt,
@@ -59,16 +61,18 @@ def _frame(
         "back": back,
         "left": left,
         "right": right,
+        "jump": jump,
+        "crouch": crouch,
     }
 
 
 def _case(name: str, why: str, arena_id: str, start: Vec3, frames: list[dict]) -> Case:
     arena = DEFAULT_ARENAS[arena_id]
-    position = start
+    state = MoveState(start, 0.0)
     expected: list[dict] = []
     for raw in frames:
-        position = step(
-            position,
+        state = step(
+            state,
             InputFrame(
                 seq=0,
                 dt=raw["dt"],
@@ -77,10 +81,12 @@ def _case(name: str, why: str, arena_id: str, start: Vec3, frames: list[dict]) -
                 back=raw["back"],
                 left=raw["left"],
                 right=raw["right"],
+                jump=raw["jump"],
+                crouch=raw["crouch"],
             ),
             arena,
         )
-        expected.append(position.to_dict())
+        expected.append(state.position.to_dict())
     # The arena travels inside the case, so the fixture is self-contained
     # and neither suite needs its own copy of the map table.
     return Case(
@@ -174,6 +180,62 @@ def build_cases() -> list[Case]:
             "atrium",
             Vec3(0.0, 0.0, 6.0),
             [_frame(forward=True) for _ in range(90)],
+        )
+    )
+
+    cases.append(
+        _case(
+            "jump_rises_and_lands",
+            "A single jump arcs up under gravity and settles back on the "
+            "ground; y is the vertical simulation, x and z do not move.",
+            "sandbox",
+            Vec3(20.0, 0.0, 10.0),
+            [_frame(jump=True)] + [_frame() for _ in range(60)],
+        )
+    )
+
+    cases.append(
+        _case(
+            "jump_while_running_keeps_the_ground_speed",
+            "Jumping mid-run arcs in y while x and z carry on at the walk "
+            "speed: vertical and horizontal are independent.",
+            "sandbox",
+            Vec3(0.0, 0.0, 20.0),
+            [_frame(forward=True, jump=True)] + [_frame(forward=True) for _ in range(50)],
+        )
+    )
+
+    cases.append(
+        _case(
+            "held_jump_bounces_and_never_sinks",
+            "Holding jump re-fires on every grounded frame (the routine "
+            "keeps no key edge); the player bounces and y never goes below "
+            "the ground.",
+            "sandbox",
+            Vec3(20.0, 0.0, 10.0),
+            [_frame(jump=True) for _ in range(90)],
+        )
+    )
+
+    cases.append(
+        _case(
+            "crouch_walks_at_half_speed",
+            "Crouch-walking covers half the ground a stand-walk would over "
+            "the same frames, and stays planted on the floor.",
+            "sandbox",
+            Vec3(0.0, 0.0, 20.0),
+            [_frame(forward=True, crouch=True) for _ in range(60)],
+        )
+    )
+
+    cases.append(
+        _case(
+            "crouch_suppresses_the_jump",
+            "Holding crouch and jump together keeps the player down: a "
+            "duck never launches.",
+            "sandbox",
+            Vec3(20.0, 0.0, 10.0),
+            [_frame(jump=True, crouch=True) for _ in range(30)],
         )
     )
 

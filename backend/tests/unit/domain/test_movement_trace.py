@@ -22,7 +22,7 @@ import pytest_intent
 
 from shoot4fun_backend.domain.model.arena import Arena, CoverBox
 from shoot4fun_backend.domain.model.input_frame import InputFrame
-from shoot4fun_backend.domain.model.movement import step
+from shoot4fun_backend.domain.model.movement import MoveState, step
 from shoot4fun_backend.domain.model.vec3 import Vec3
 
 TRACE_PATH = Path(__file__).resolve().parents[3].parent / "shared" / "movement_trace.json"
@@ -66,15 +66,15 @@ TRACE = _load()
 def test_movement_matches_the_shared_trace(case: dict) -> None:
     arena = _arena(case["arena"])
     epsilon = float(TRACE["epsilon"])
-    position = _vec(case["start"])
+    state = MoveState(_vec(case["start"]), 0.0)
 
     # strict: a case whose frames and expectations differ in length is a
     # corrupt fixture, and silently replaying the shorter one would pass.
     for index, (raw, want) in enumerate(
         zip(case["frames"], case["expected"], strict=True)
     ):
-        position = step(
-            position,
+        state = step(
+            state,
             InputFrame(
                 seq=0,
                 dt=float(raw["dt"]),
@@ -83,14 +83,18 @@ def test_movement_matches_the_shared_trace(case: dict) -> None:
                 back=bool(raw["back"]),
                 left=bool(raw["left"]),
                 right=bool(raw["right"]),
+                jump=bool(raw.get("jump")),
+                crouch=bool(raw.get("crouch")),
             ),
             arena,
         )
-        assert abs(position.x - float(want["x"])) <= epsilon, (
-            f"{case['name']}: x diverged at step {index} "
-            f"(got {position.x}, want {want['x']}). Regenerate with: {REGENERATE}"
-        )
-        assert abs(position.z - float(want["z"])) <= epsilon, (
-            f"{case['name']}: z diverged at step {index} "
-            f"(got {position.z}, want {want['z']}). Regenerate with: {REGENERATE}"
-        )
+        position = state.position
+        # x, z is the flat plane; y is the jump/crouch simulation (issue
+        # #10). All three are pinned, so a vertical divergence fails the
+        # gate exactly as a horizontal one does.
+        for axis in ("x", "y", "z"):
+            assert abs(getattr(position, axis) - float(want[axis])) <= epsilon, (
+                f"{case['name']}: {axis} diverged at step {index} "
+                f"(got {getattr(position, axis)}, want {want[axis]}). "
+                f"Regenerate with: {REGENERATE}"
+            )

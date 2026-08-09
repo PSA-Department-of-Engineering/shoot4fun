@@ -34,6 +34,7 @@ from shoot4fun_backend.domain.exceptions.room_full_error import RoomFullError
 from shoot4fun_backend.domain.model.arena import DEFAULT_ARENAS, Arena
 from shoot4fun_backend.domain.model.hitscan import (
     HEADSHOT_MULTIPLIER,
+    TargetGeom,
     eye_of,
     look_direction,
     resolve,
@@ -42,7 +43,7 @@ from shoot4fun_backend.domain.model.input_frame import InputFrame
 from shoot4fun_backend.domain.model.kill_counter import KillCounter
 from shoot4fun_backend.domain.model.match_state import MatchState
 from shoot4fun_backend.domain.model.match_state_machine import MatchStateMachine
-from shoot4fun_backend.domain.model.movement import PITCH_LIMIT, step
+from shoot4fun_backend.domain.model.movement import GROUND_Y, PITCH_LIMIT, MoveState, step
 from shoot4fun_backend.domain.model.player import Player
 from shoot4fun_backend.domain.model.vec3 import Vec3
 
@@ -102,7 +103,7 @@ class MatchRoom:
     started_at: float | None = None
     ends_at: float | None = None
     tick: int = 0
-    _history: dict[int, dict[str, Vec3]] = field(default_factory=dict)
+    _history: dict[int, dict[str, TargetGeom]] = field(default_factory=dict)
 
     @staticmethod
     def new(arena_id: str = "sandbox", room_id: str | None = None) -> MatchRoom:
@@ -223,8 +224,17 @@ class MatchRoom:
         granted = player.grant_simulation_time(frame.dt)
         if granted <= 0.0:
             return
-        moved = step(player.position, replace(frame, dt=granted), self.arena)
-        player.position = self._separate(player_id, moved)
+        moved = step(
+            MoveState(player.position, player.vy),
+            replace(frame, dt=granted),
+            self.arena,
+        )
+        player.vy = moved.vy
+        # Crouch is the grounded stance the routine settled on: a player
+        # in the air is never crouched, whatever the button says.
+        grounded = moved.position.y <= GROUND_Y + 1e-9 and moved.vy <= 0.0
+        player.crouching = bool(frame.crouch) and grounded
+        player.position = self._separate(player_id, moved.position)
 
     def _separate(self, player_id: str, position: Vec3) -> Vec3:
         """Push a player out of any living player they overlap.
@@ -272,7 +282,7 @@ class MatchRoom:
             return None
         shooter.consume_shot(now)
 
-        origin = eye_of(shooter.position)
+        origin = eye_of(shooter.position, shooter.eye_height)
         direction = look_direction(shooter.yaw, _clamp_pitch(frame.pitch))
         targets = self._targets_at(frame.ack_tick, exclude=player_id)
         hit = resolve(origin, direction, targets, self.arena)
@@ -298,8 +308,13 @@ class MatchRoom:
             point=hit.point,
         )
 
-    def _targets_at(self, ack_tick: int, exclude: str) -> dict[str, Vec3]:
-        """Living players' feet positions as of the shooter's view tick."""
+    def _targets_at(self, ack_tick: int, exclude: str) -> dict[str, TargetGeom]:
+        """Living players' capsules as of the shooter's view tick.
+
+        Each carries the feet and the capsule height the target had at
+        that tick, so a player who was crouched when the shooter drew is
+        rewound as the shorter body they saw (issue #10).
+        """
         oldest = self.tick - MAX_REWIND_TICKS
         wanted = self.tick if ack_tick <= 0 else ack_tick
         if wanted > self.tick:
@@ -308,7 +323,7 @@ class MatchRoom:
             wanted = oldest
         past = self._history.get(wanted, {})
         return {
-            pid: past.get(pid, player.position)
+            pid: past.get(pid, TargetGeom(player.position, player.capsule_height))
             for pid, player in self.players.items()
             if pid != exclude and player.health.is_alive
         }
@@ -337,7 +352,8 @@ class MatchRoom:
 
     def _record_history(self) -> None:
         self._history[self.tick] = {
-            pid: p.position for pid, p in self.players.items()
+            pid: TargetGeom(p.position, p.capsule_height)
+            for pid, p in self.players.items()
         }
         stale = self.tick - HISTORY_TICKS
         self._history.pop(stale, None)

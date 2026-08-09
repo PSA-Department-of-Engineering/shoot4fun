@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { step, type ArenaLike, type MoveIntent, type Vec3Like } from "./movement";
+import { step, type ArenaLike, type MoveIntent, type MoveState, type Vec3Like } from "./movement";
 
 interface TraceCase {
     name: string;
@@ -45,22 +45,21 @@ describe("movement agrees with the server's authoritative routine", () => {
 
     for (const testCase of trace.cases) {
         it(`${testCase.name}: ${testCase.why}`, () => {
-            let position: Vec3Like = testCase.start;
+            let state: MoveState = { position: testCase.start, vy: 0 };
             for (let i = 0; i < testCase.frames.length; i++) {
-                position = step(position, testCase.frames[i], testCase.arena);
+                state = step(state, testCase.frames[i], testCase.arena);
+                const position = state.position;
                 const want = testCase.expected[i];
                 // Reported per step rather than only at the end, so a
-                // divergence names the frame it began on.
-                expect(
-                    Math.abs(position.x - want.x),
-                    `x diverged at step ${i} (got ${position.x}, want ${want.x}). ` +
-                        `If the server routine changed, run: ${trace.regenerate_with}`,
-                ).toBeLessThanOrEqual(trace.epsilon);
-                expect(
-                    Math.abs(position.z - want.z),
-                    `z diverged at step ${i} (got ${position.z}, want ${want.z}). ` +
-                        `If the server routine changed, run: ${trace.regenerate_with}`,
-                ).toBeLessThanOrEqual(trace.epsilon);
+                // divergence names the frame it began on. y is the
+                // jump/crouch axis (issue #10), pinned like x and z.
+                for (const axis of ["x", "y", "z"] as const) {
+                    expect(
+                        Math.abs(position[axis] - want[axis]),
+                        `${axis} diverged at step ${i} (got ${position[axis]}, want ${want[axis]}). ` +
+                            `If the server routine changed, run: ${trace.regenerate_with}`,
+                    ).toBeLessThanOrEqual(trace.epsilon);
+                }
             }
         });
     }

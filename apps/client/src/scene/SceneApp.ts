@@ -51,6 +51,11 @@ import { createGroundTexture } from "./textures";
 import { ViewKick } from "./ViewKick";
 
 const EYE_HEIGHT = 1.6;
+/* Crouched eye height (issue #10), the client mirror of the server's
+ * `PLAYER_CROUCH_EYE_HEIGHT`. The camera lerps between the two so the
+ * duck reads as a movement rather than a snap (REF-Netcode §6). */
+const CROUCH_EYE_HEIGHT = 0.9;
+const EYE_LERP_PER_S = 12;
 const PLAYER_HEIGHT = 1.8;
 const PING_INTERVAL_MS = 2000;
 
@@ -177,6 +182,8 @@ export function createSceneApp(): SceneApp {
     let arena: ArenaLike | null = null;
     let arenaId = "";
     let localAlive = true;
+    /** The camera's current eye height, lerped toward the crouch target. */
+    let eyeHeight = EYE_HEIGHT;
     let localReloading = false;
     let localMaxHp = 0;
     let matchState: RoomSnapshot["state"] | null = null;
@@ -356,6 +363,11 @@ export function createSceneApp(): SceneApp {
                     back: sample.back,
                     left: sample.left,
                     right: sample.right,
+                    // The vertical intent the shared routine reads (issue
+                    // #10). Predicted like everything else here so the
+                    // jump is on screen the instant Space goes down.
+                    jump: sample.jump && localAlive,
+                    crouch: sample.crouch && localAlive,
                 };
                 if (localAlive) predictor.predict(inputSeq, intent, arena);
                 client.sendInput({
@@ -368,9 +380,9 @@ export function createSceneApp(): SceneApp {
                         left: sample.left,
                         right: sample.right,
                         fire: sample.fire && localAlive,
-                        // Carried to the server, which parses them; no
-                        // movement routine reads them yet, so prediction
-                        // and the shared trace are untouched (INT-003).
+                        // The vertical intent the server integrates into a
+                        // jump arc and a crouch stance (issue #10). Sent as
+                        // buttons; the client predicts the same effect above.
                         jump: sample.jump && localAlive,
                         crouch: sample.crouch && localAlive,
                     },
@@ -403,7 +415,14 @@ export function createSceneApp(): SceneApp {
         // The rig carries locomotion; the camera only ever rotates.
         const position = predictor.current();
         trackLocalSpeed(position.x, position.z, dt);
-        rig.position.set(position.x, position.y + EYE_HEIGHT, position.z);
+        // Crouch dips the eye, but only on the ground: you cannot duck in
+        // mid-air, so the camera does not sink through a jump. The dip is
+        // lerped, not snapped (REF-Netcode §6).
+        const grounded = position.y <= 1e-3;
+        const targetEye =
+            localAlive && sample.crouch && grounded ? CROUCH_EYE_HEIGHT : EYE_HEIGHT;
+        eyeHeight += (targetEye - eyeHeight) * Math.min(1, EYE_LERP_PER_S * dt);
+        rig.position.set(position.x, position.y + eyeHeight, position.z);
 
         // 3. Everyone else, rendered slightly in the past. Each avatar
         //    reads its own locomotion out of how far it just moved.
@@ -549,6 +568,11 @@ export function createSceneApp(): SceneApp {
         (window as unknown as { __sfDebug: unknown }).__sfDebug = {
             camera: () => ({ yaw: camera.rotation.y, pitch: camera.rotation.x }),
             position: () => ({ ...predictor.current() }),
+            /* The camera's height above the feet right now. Standing it
+             * sits at EYE_HEIGHT; crouching it lerps down toward
+             * CROUCH_EYE_HEIGHT (issue #10). Read off the real rig, not a
+             * constant, so a spec attests the duck actually happened. */
+            eyeHeight: () => rig.position.y - predictor.current().y,
             correction: () => predictor.correction(),
             pendingInputs: () => predictor.pendingCount(),
             locked: () => input.isLocked(),

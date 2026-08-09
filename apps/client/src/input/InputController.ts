@@ -33,10 +33,10 @@ export interface InputSnapshot {
     left: boolean;
     right: boolean;
     fire: boolean;
-    /** Jump and crouch intent. Sampled and sent like any other button;
-     * no movement routine reads them yet, so they change nothing on
-     * screen (INT-003). The vertical simulation they will drive is
-     * delivery-scale work (issue #10). */
+    /** Jump and crouch intent (issue #10). Sampled and sent like any
+     * other button; the shared movement routine reads them to drive the
+     * jump arc and the crouch stance, predicted locally and integrated
+     * on the server. */
     jump: boolean;
     crouch: boolean;
     yaw: number;
