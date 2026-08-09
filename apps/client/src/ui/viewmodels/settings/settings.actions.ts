@@ -10,10 +10,12 @@
 import { create } from "zustand";
 
 import {
+    DEFAULT_HAPTICS_ENABLED,
     DEFAULT_MASTER_VOLUME,
     DEFAULT_SENSITIVITY,
     DEFAULT_SFX_VOLUME,
     DEFAULT_TOUCH_SENSITIVITY,
+    HAPTICS_KEY,
     MASTER_VOLUME_KEY,
     SENSITIVITY_KEY,
     SENSITIVITY_MAX,
@@ -31,6 +33,7 @@ interface SettingsActions {
     setTouchSensitivity: (value: number) => void;
     setMasterVolume: (value: number) => void;
     setSfxVolume: (value: number) => void;
+    setHapticsEnabled: (value: boolean) => void;
 }
 
 function readStored(key: string, fallback: number): number {
@@ -38,6 +41,12 @@ function readStored(key: string, fallback: number): number {
     if (raw === null) return fallback;
     const value = Number(raw);
     return Number.isFinite(value) ? value : fallback;
+}
+
+function readFlag(key: string, fallback: boolean): boolean {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return raw !== "0";
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -49,12 +58,18 @@ function persist(key: string, value: number): void {
     window.dispatchEvent(new StorageEvent("storage", { key }));
 }
 
+function persistFlag(key: string, value: boolean): void {
+    window.localStorage.setItem(key, value ? "1" : "0");
+    window.dispatchEvent(new StorageEvent("storage", { key }));
+}
+
 export const useSettings = create<SettingsState & SettingsActions>()((set) => ({
     isOpen: false,
     sensitivity: DEFAULT_SENSITIVITY,
     touchSensitivity: DEFAULT_TOUCH_SENSITIVITY,
     masterVolume: DEFAULT_MASTER_VOLUME,
     sfxVolume: DEFAULT_SFX_VOLUME,
+    hapticsEnabled: DEFAULT_HAPTICS_ENABLED,
 
     hydrate: () =>
         set({
@@ -70,6 +85,7 @@ export const useSettings = create<SettingsState & SettingsActions>()((set) => ({
             ),
             masterVolume: clamp(readStored(MASTER_VOLUME_KEY, DEFAULT_MASTER_VOLUME), 0, 1),
             sfxVolume: clamp(readStored(SFX_VOLUME_KEY, DEFAULT_SFX_VOLUME), 0, 1),
+            hapticsEnabled: readFlag(HAPTICS_KEY, DEFAULT_HAPTICS_ENABLED),
         }),
 
     open: () => set({ isOpen: true }),
@@ -98,5 +114,10 @@ export const useSettings = create<SettingsState & SettingsActions>()((set) => ({
         const sfxVolume = clamp(value, 0, 1);
         persist(SFX_VOLUME_KEY, sfxVolume);
         set({ sfxVolume });
+    },
+
+    setHapticsEnabled: (value) => {
+        persistFlag(HAPTICS_KEY, value);
+        set({ hapticsEnabled: value });
     },
 }));

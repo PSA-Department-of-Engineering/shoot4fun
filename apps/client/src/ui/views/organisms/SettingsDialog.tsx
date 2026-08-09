@@ -6,6 +6,7 @@ import {
     SENSITIVITY_MAX,
     SENSITIVITY_MIN,
     SENSITIVITY_STEP,
+    selectHapticsEnabled,
     selectIsSettingsOpen,
     selectMasterVolume,
     selectSensitivity,
@@ -16,6 +17,7 @@ import {
 
 import { Button } from "../atoms/Button";
 import { SettingSlider } from "../molecules/SettingSlider";
+import { SettingToggle } from "../molecules/SettingToggle";
 
 const KEYBINDS: readonly [string, string][] = [
     ["W A S D", "Move"],
@@ -34,11 +36,13 @@ export const SettingsDialog = () => {
     const touchSensitivity = useSettings(selectTouchSensitivity);
     const masterVolume = useSettings(selectMasterVolume);
     const sfxVolume = useSettings(selectSfxVolume);
+    const hapticsEnabled = useSettings(selectHapticsEnabled);
     const close = useSettings((s) => s.close);
     const setSensitivity = useSettings((s) => s.setSensitivity);
     const setTouchSensitivity = useSettings((s) => s.setTouchSensitivity);
     const setMasterVolume = useSettings((s) => s.setMasterVolume);
     const setSfxVolume = useSettings((s) => s.setSfxVolume);
+    const setHapticsEnabled = useSettings((s) => s.setHapticsEnabled);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -106,6 +110,12 @@ export const SettingsDialog = () => {
                     max={1}
                     step={0.01}
                     onChange={setSfxVolume}
+                />
+                <SettingToggle
+                    id="setting-haptics"
+                    label="Vibration (touch devices)"
+                    checked={hapticsEnabled}
+                    onChange={setHapticsEnabled}
                 />
 
                 <h3 className="modal__subtitle">Controls</h3>
