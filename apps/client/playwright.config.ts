@@ -17,13 +17,14 @@ const BACKEND_PORT = 8000;
 const BASE_URL = process.env.BASE_URL ?? `http://localhost:${PORT}`;
 const PYTHON = process.env.PYTHON ?? "python";
 
+// `e2e/foundry/` probes a live deployment, so it is opt-in: without a host it
+// would fail on every machine that is not pointed at the cluster, and a suite
+// that is expected to be red is a suite nobody reads.
+const FOUNDRY_IGNORE = process.env.SHOOT4FUN_HOST ? [] : ["**/foundry/**"];
+
 export default defineConfig({
     testDir: "./e2e",
-    // `e2e/foundry/` probes a live deployment, so it is opt-in: without
-    // a host it would fail on every machine that is not pointed at the
-    // cluster, and a suite that is expected to be red is a suite nobody
-    // reads.
-    testIgnore: process.env.SHOOT4FUN_HOST ? [] : ["**/foundry/**"],
+    testIgnore: FOUNDRY_IGNORE,
     timeout: 60_000,
     expect: { timeout: 10_000 },
     workers: 1,
@@ -43,7 +44,29 @@ export default defineConfig({
             ],
         },
     },
-    projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+    projects: [
+        {
+            name: "chromium",
+            // The mouse-and-keyboard match, driven under pointer lock. The
+            // touch overlay never mounts on a fine pointer, so its spec would
+            // be an empty file here - exclude it rather than run nothing.
+            testIgnore: [...FOUNDRY_IGNORE, "**/touch.spec.ts"],
+            use: { ...devices["Desktop Chrome"] },
+        },
+        {
+            name: "touch",
+            // A phone: a coarse primary pointer AND at least one touch point,
+            // the pair `isTouchDevice()` (src/input/touch.ts) gates the
+            // on-screen overlay on. Pixel 5's descriptor sets `isMobile`
+            // (which makes `(pointer: coarse)` match) and `hasTouch`
+            // (`maxTouchPoints > 0`); together they mount `TouchControls`
+            // where desktop chromium shows the pointer-lock gate. This project
+            // runs only the touch spec (INT-018) - the desktop match specs
+            // assume a lock a phone has not got.
+            testMatch: "**/touch.spec.ts",
+            use: { ...devices["Pixel 5"] },
+        },
+    ],
     webServer: process.env.BASE_URL
         ? undefined
         : [

@@ -22,6 +22,9 @@
 #   backend/tests/**                      pytest, `@pytest_intent.intent`
 #   apps/client/e2e/match.spec.ts         playwright, two browsers against
 #                                         a real server, `intent()`
+#   apps/client/e2e/touch.spec.ts         playwright, `touch` project: a
+#                                         phone-emulated overlay driven
+#                                         against a real server, `intent()`
 #   apps/client/e2e/foundry/**            playwright, opt-in: the suite
 #                                         skips it unless SHOOT4FUN_HOST
 #                                         points at a deployment
@@ -274,20 +277,21 @@ INT-017:
 
 # New requirement, introduced by ticket #17 (Support Mobile Players). The
 # original proposal has no mobile Req, so #17 is MOB-001's durable source -
-# recorded here so the requirement spine has no silent gap. Draft because
-# no marker names it. What stands today: the two pure decisions of the
-# touch channel - device detection and stick-to-buttons - are unit-tested
-# in `apps/client/src/input/touch.test.ts`, and `InputController.touchInput`
-# writes the same held/firing/yaw/pitch state the keyboard and mouse write,
-# so the predictor, the wire and the server (INT-009) are unchanged. What
-# is NOT yet attested: the live overlay's DOM plumbing (`TouchControls.tsx`).
-# The e2e suite runs desktop chromium with no coarse pointer, so `MatchPage`
-# never mounts the overlay in CI. A touch-emulation e2e spec that mounts it,
-# drives a match and carries the `INT-018` marker is what promotes this
-# claim to active; it is filed as its own ticket (#32).
+# recorded here so the requirement spine has no silent gap. The two pure
+# decisions of the touch channel - device detection and stick-to-buttons -
+# are unit-tested in `apps/client/src/input/touch.test.ts`, and
+# `InputController.touchInput` writes the same held/firing/yaw/pitch state
+# the keyboard and mouse write, so the predictor, the wire and the server
+# (INT-009) are unchanged. The live overlay's DOM plumbing
+# (`TouchControls.tsx`) is now attested too: `apps/client/e2e/touch.spec.ts`
+# runs under a `touch` Playwright project that emulates a coarse pointer AND
+# a touch point, so `MatchPage` mounts the overlay, and it drives the stick,
+# look pad and fire button, asserting each feeds the same wire intent (held
+# direction, yaw, firing) a desktop match does. That spec carries the
+# `INT-018` marker, promoting this claim to active (#32).
 INT-018:
   version: 1.0.0
-  status: draft
+  status: active
   statement: "A touch device - one that reports a coarse primary pointer AND at least one touch point - is offered an on-screen control layout in place of the desktop pointer-lock gate: a thumbstick that walks, a look pad that aims, and fire / jump / crouch / reload / weapon-select controls, each capturing its own pointer so they act as independent simultaneous touches. Every control feeds the same InputController intent (held buttons, firing, yaw, pitch) the keyboard and mouse feed, so the predictor, the wire and the server are unchanged, and the overlay mounts only on touch devices so the desktop pointer-lock layout (INT-002) is untouched."
   rationale: "Mobile players cannot play at all: the input path is gated on pointer lock and the keyboard, neither of which a phone has (#17). A touch input layer is the requirement #17 adds; it is deliberately additive and inert on non-touch devices so the server-authoritative contract (INT-009) and the desktop mouse-look contract (INT-002) are unaffected."
   derived_from: MOB-001
