@@ -15,6 +15,8 @@
 
 import type { PlayerWire, RoomSnapshot } from "@/net/protocol";
 
+import { ENDING_SECONDS, formatClock } from "./clock";
+
 const HIT_MARKER_MS = 350;
 const HIT_FLASH_MS = 500;
 
@@ -24,6 +26,7 @@ export class Hud {
     private healthNumber: HTMLElement;
     private ammoNumber: HTMLElement;
     private stats: HTMLElement;
+    private timer: HTMLElement;
     private respawn: HTMLElement;
     private hitIndicator: HTMLElement;
     private hitMarker: HTMLElement;
@@ -60,6 +63,7 @@ export class Hud {
             <div class="hud-ammo">
                 <div class="hud-number" data-ammo>30 / 90</div>
             </div>
+            <div class="hud-timer hud-number" data-timer data-visible="false">0:00</div>
             <div class="hud-stats">
                 <div class="hud-secondary">KILLS &middot; DEATHS</div>
                 <div class="hud-number hud-number-small" data-stats>0 &middot; 0</div>
@@ -80,6 +84,7 @@ export class Hud {
         this.healthNumber = this.root.querySelector("[data-health-number]")!;
         this.ammoNumber = this.root.querySelector("[data-ammo]")!;
         this.stats = this.root.querySelector("[data-stats]")!;
+        this.timer = this.root.querySelector("[data-timer]")!;
         this.respawn = this.root.querySelector("[data-respawn]")!;
         this.hitIndicator = this.root.querySelector("[data-hit]")!;
         this.hitMarker = this.root.querySelector("[data-hitmarker]")!;
@@ -132,6 +137,18 @@ export class Hud {
                 // The claim is a countdown, so it counts down.
                 this.respawn.textContent = `RESPAWNING IN ${Math.ceil(me.respawn_in)}...`;
             }
+        }
+        /* The match clock is one thing for the whole room, not a per-player
+         * value: the server sends it only while a match runs (null in the
+         * lobby and the results), so the timer shows exactly then, and warns
+         * once the end is close. */
+        const remaining = room.time_remaining;
+        if (remaining === null) {
+            this.timer.dataset.visible = "false";
+        } else {
+            this.timer.dataset.visible = "true";
+            this.timer.textContent = formatClock(remaining);
+            this.timer.dataset.ending = String(remaining <= ENDING_SECONDS);
         }
         const now = performance.now();
         if (this.hitAt > 0 && now - this.hitAt > HIT_FLASH_MS) {
