@@ -83,12 +83,14 @@ const TELEPORT_METRES = 2;
 const MATCH_START_HORN = [392, 523, 659];
 const MATCH_END_STING = [659, 523, 392];
 
-/* The solo aim-training range (issue #15), as the client draws it. It
- * mirrors the server's `ARENA_AIMLABS` layout so the room looks the same
- * whether a lone player drills targets in it here or a match is ever set
- * on it — but the range needs no server: the targets are spawned and
- * scored on the client (see `TrainingSession`). The single spawn stands
- * at the near edge looking out across the field the targets appear in. */
+/* The solo aim-training range (issue #15), as the client draws it. The
+ * range is client-only — no server-side match, no wire layout — so this
+ * constant is the single source of truth for its room: the targets are
+ * spawned, moved and scored on the client (see `TrainingSession`), and
+ * there is deliberately no server `aimlabs` arena to drift against (it
+ * would only pollute the multiplayer map picker). The single spawn
+ * stands at the near edge looking out across the field the targets
+ * appear in. */
 const TRAINING_SPAWN = { x: 0, z: 9 };
 const AIM_ROOM: ArenaWire = {
     id: "aimlabs",
