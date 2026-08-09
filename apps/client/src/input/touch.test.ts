@@ -1,7 +1,13 @@
 /* The two pure decisions of the touch channel (issue #17): which devices
  * get the touch layout, and how a stick vector becomes held directions.
- * The live overlay's DOM plumbing is exercised by the e2e suite; these
- * are the parts that answer the same way with no browser at all.
+ * These are the parts that answer the same way with no browser at all.
+ *
+ * The live overlay's DOM plumbing (`TouchControls.tsx`) is NOT covered
+ * here, and it is not covered by the e2e suite either: e2e runs desktop
+ * chromium with no coarse pointer, so `MatchPage` never mounts the overlay
+ * in CI. That gap is declared, not hidden - intent claim INT-018 is
+ * `status: draft` for exactly this reason, and a touch-emulation e2e spec
+ * that mounts the overlay is filed as its own ticket (#32).
  */
 
 import { describe, expect, it } from "vitest";
