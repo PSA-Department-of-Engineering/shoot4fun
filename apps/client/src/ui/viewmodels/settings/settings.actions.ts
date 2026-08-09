@@ -13,11 +13,13 @@ import {
     DEFAULT_MASTER_VOLUME,
     DEFAULT_SENSITIVITY,
     DEFAULT_SFX_VOLUME,
+    DEFAULT_TOUCH_SENSITIVITY,
     MASTER_VOLUME_KEY,
     SENSITIVITY_KEY,
     SENSITIVITY_MAX,
     SENSITIVITY_MIN,
     SFX_VOLUME_KEY,
+    TOUCH_SENSITIVITY_KEY,
     type SettingsState,
 } from "./settings.state";
 
@@ -26,6 +28,7 @@ interface SettingsActions {
     open: () => void;
     close: () => void;
     setSensitivity: (value: number) => void;
+    setTouchSensitivity: (value: number) => void;
     setMasterVolume: (value: number) => void;
     setSfxVolume: (value: number) => void;
 }
@@ -49,6 +52,7 @@ function persist(key: string, value: number): void {
 export const useSettings = create<SettingsState & SettingsActions>()((set) => ({
     isOpen: false,
     sensitivity: DEFAULT_SENSITIVITY,
+    touchSensitivity: DEFAULT_TOUCH_SENSITIVITY,
     masterVolume: DEFAULT_MASTER_VOLUME,
     sfxVolume: DEFAULT_SFX_VOLUME,
 
@@ -56,6 +60,11 @@ export const useSettings = create<SettingsState & SettingsActions>()((set) => ({
         set({
             sensitivity: clamp(
                 readStored(SENSITIVITY_KEY, DEFAULT_SENSITIVITY),
+                SENSITIVITY_MIN,
+                SENSITIVITY_MAX,
+            ),
+            touchSensitivity: clamp(
+                readStored(TOUCH_SENSITIVITY_KEY, DEFAULT_TOUCH_SENSITIVITY),
                 SENSITIVITY_MIN,
                 SENSITIVITY_MAX,
             ),
@@ -71,6 +80,12 @@ export const useSettings = create<SettingsState & SettingsActions>()((set) => ({
         const sensitivity = clamp(value, SENSITIVITY_MIN, SENSITIVITY_MAX);
         persist(SENSITIVITY_KEY, sensitivity);
         set({ sensitivity });
+    },
+
+    setTouchSensitivity: (value) => {
+        const touchSensitivity = clamp(value, SENSITIVITY_MIN, SENSITIVITY_MAX);
+        persist(TOUCH_SENSITIVITY_KEY, touchSensitivity);
+        set({ touchSensitivity });
     },
 
     setMasterVolume: (value) => {

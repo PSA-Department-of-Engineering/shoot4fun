@@ -10,6 +10,7 @@ import {
     selectMasterVolume,
     selectSensitivity,
     selectSfxVolume,
+    selectTouchSensitivity,
     useSettings,
 } from "@/ui/viewmodels/settings";
 
@@ -30,10 +31,12 @@ const KEYBINDS: readonly [string, string][] = [
 export const SettingsDialog = () => {
     const isOpen = useSettings(selectIsSettingsOpen);
     const sensitivity = useSettings(selectSensitivity);
+    const touchSensitivity = useSettings(selectTouchSensitivity);
     const masterVolume = useSettings(selectMasterVolume);
     const sfxVolume = useSettings(selectSfxVolume);
     const close = useSettings((s) => s.close);
     const setSensitivity = useSettings((s) => s.setSensitivity);
+    const setTouchSensitivity = useSettings((s) => s.setTouchSensitivity);
     const setMasterVolume = useSettings((s) => s.setMasterVolume);
     const setSfxVolume = useSettings((s) => s.setSfxVolume);
 
@@ -73,6 +76,16 @@ export const SettingsDialog = () => {
                     max={SENSITIVITY_MAX}
                     step={SENSITIVITY_STEP}
                     onChange={setSensitivity}
+                />
+                <SettingSlider
+                    id="setting-touch-sensitivity"
+                    label="Touch look sensitivity"
+                    display={formatSensitivity(touchSensitivity)}
+                    value={touchSensitivity}
+                    min={SENSITIVITY_MIN}
+                    max={SENSITIVITY_MAX}
+                    step={SENSITIVITY_STEP}
+                    onChange={setTouchSensitivity}
                 />
                 <SettingSlider
                     id="setting-master"

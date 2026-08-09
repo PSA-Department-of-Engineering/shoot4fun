@@ -4,6 +4,7 @@ import type { SettingsState } from "./settings.state";
 
 export const selectIsSettingsOpen = (s: SettingsState): boolean => s.isOpen;
 export const selectSensitivity = (s: SettingsState): number => s.sensitivity;
+export const selectTouchSensitivity = (s: SettingsState): number => s.touchSensitivity;
 export const selectMasterVolume = (s: SettingsState): number => s.masterVolume;
 export const selectSfxVolume = (s: SettingsState): number => s.sfxVolume;
 
