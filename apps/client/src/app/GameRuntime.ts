@@ -15,6 +15,7 @@
  * target.
  */
 
+import type { TouchInput } from "@/input/InputController";
 import { MatchClient, type ConnectionStatus } from "@/net/MatchClient";
 import type { PlayerWire, RoomSnapshot } from "@/net/protocol";
 import { createSceneApp, type SceneApp } from "@/scene/SceneApp";
@@ -45,6 +46,12 @@ export interface GameRuntime {
     /** Ask for pointer lock. Only meaningful inside a user gesture. */
     requestLock(): Promise<boolean>;
     isLocked(): boolean;
+    /** The touch layout's input channel (issue #17), for the on-screen
+     * controls a mobile player drives instead of mouse and keyboard. */
+    touchInput(): TouchInput;
+    /** Start audio from a touch gesture, since a phone never takes the
+     * pointer lock that starts it on desktop. */
+    resumeAudio(): void;
     /** Round-trip time in milliseconds from the last answered ping. */
     latency(): number;
     onSnapshot(cb: (room: RoomSnapshot) => void): () => void;
@@ -151,6 +158,12 @@ function createGameRuntime(): GameRuntime {
         },
         isLocked() {
             return scene.isLocked();
+        },
+        touchInput() {
+            return scene.touchInput();
+        },
+        resumeAudio() {
+            scene.resumeAudio();
         },
         latency() {
             return client?.latency() ?? 0;
