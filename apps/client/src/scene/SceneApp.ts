@@ -677,6 +677,7 @@ export function createSceneApp(): SceneApp {
         firstPerson.fire();
         viewKick.recoil();
         audio.shot();
+        haptics.fire();
 
         camera.getWorldQuaternion(scratchQuaternion);
         scratchForward.set(0, 0, -1).applyQuaternion(scratchQuaternion).normalize();
@@ -702,8 +703,10 @@ export function createSceneApp(): SceneApp {
 
         if (targetId !== null) {
             // A struck target confirms like a landed shot in a match: the
-            // hit marker and the hit chime, through the same channels.
+            // hit marker, the hit chime and the buzz, through the same
+            // channels.
             audio.hit();
+            haptics.hit();
             for (const handler of hitHandlers) handler(false, false);
         } else if (nearest) {
             if (nearest.face) {
