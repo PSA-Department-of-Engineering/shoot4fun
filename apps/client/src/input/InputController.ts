@@ -33,6 +33,12 @@ export interface InputSnapshot {
     left: boolean;
     right: boolean;
     fire: boolean;
+    /** Jump and crouch intent. Sampled and sent like any other button;
+     * no movement routine reads them yet, so they change nothing on
+     * screen (INT-003). The vertical simulation they will drive is
+     * delivery-scale work (issue #10). */
+    jump: boolean;
+    crouch: boolean;
     yaw: number;
     pitch: number;
 }
@@ -58,6 +64,17 @@ const MOVEMENT_BY_CODE: Record<string, keyof Pick<
     ArrowLeft: "left",
     KeyD: "right",
     ArrowRight: "right",
+};
+
+/* Jump and crouch, read by physical position like the movement keys so
+ * the binding survives a non-QWERTY layout. Space jumps; either control
+ * key or C crouches. Held like the movement keys: the frame reports what
+ * was down when it was sampled. */
+const STANCE_BY_CODE: Record<string, keyof Pick<InputSnapshot, "jump" | "crouch">> = {
+    Space: "jump",
+    ControlLeft: "crouch",
+    ControlRight: "crouch",
+    KeyC: "crouch",
 };
 
 export class InputController {
@@ -147,6 +164,8 @@ export class InputController {
             left: this.isHeld("left"),
             right: this.isHeld("right"),
             fire: this.firing,
+            jump: this.isHeld("jump"),
+            crouch: this.isHeld("crouch"),
             yaw: this.yaw,
             pitch: this.pitch,
         };
@@ -186,6 +205,14 @@ export class InputController {
             event.preventDefault();
             return;
         }
+        const stance = STANCE_BY_CODE[event.code];
+        if (stance) {
+            this.held.add(stance);
+            // Space scrolls the page and a lone Control key does nothing
+            // useful in game; swallow both so neither reaches the browser.
+            event.preventDefault();
+            return;
+        }
         if (event.repeat) return;
         const key = event.key.toLowerCase();
         if (key === "r") this.pendingReload = true;
@@ -196,6 +223,8 @@ export class InputController {
     private onKeyUp = (event: KeyboardEvent): void => {
         const movement = MOVEMENT_BY_CODE[event.code];
         if (movement) this.held.delete(movement);
+        const stance = STANCE_BY_CODE[event.code];
+        if (stance) this.held.delete(stance);
     };
 
     /* Losing focus mid-stride leaves a key logically held forever,
