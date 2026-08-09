@@ -27,6 +27,8 @@
  * control that would otherwise have to defend itself.
  */
 
+import { stickToButtons } from "./touch";
+
 export interface InputSnapshot {
     forward: boolean;
     back: boolean;
@@ -44,6 +46,23 @@ export interface InputSnapshot {
 }
 
 export type LockListener = (locked: boolean) => void;
+
+/* The touch layout's channel into this controller (issue #17). A phone
+ * has no pointer lock and no keyboard, so the on-screen stick, look pad
+ * and buttons drive the same held state the mouse and keys drive - the
+ * scene samples one snapshot and never learns where it came from. */
+export interface TouchInput {
+    /** Set the stick vector: x right-positive, y forward-positive, each
+     * normalised to [-1, 1]. Mapped to the four held directions. */
+    move(x: number, y: number): void;
+    /** Turn the camera from a look-pad drag, in pixels, at mouse sensitivity. */
+    look(dx: number, dy: number): void;
+    fire(down: boolean): void;
+    jump(down: boolean): void;
+    crouch(down: boolean): void;
+    reload(): void;
+    switchWeapon(weapon: string): void;
+}
 
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
 const DEFAULT_SENSITIVITY = 0.0022;
@@ -189,6 +208,48 @@ export class InputController {
     setLook(yaw: number, pitch: number): void {
         this.yaw = yaw;
         this.pitch = clampPitch(pitch);
+    }
+
+    /* The touch layout's handle on this controller (issue #17).
+     *
+     * These write the very same fields the mouse and keyboard write -
+     * `held`, `firing`, `yaw`, `pitch`, the pending reload and weapon -
+     * so `sample()` reads one intent and the wire never learns whether a
+     * finger or a key produced it. None of them consult the pointer lock:
+     * lock is the browser's gate on relative *mouse* deltas, and a touch
+     * device has neither the lock nor the mouse. `onBlur` still clears
+     * everything if the tab loses focus mid-press, so a lifted finger the
+     * browser swallowed does not leave the player walking. */
+    touchInput(): TouchInput {
+        return {
+            move: (x, y) => {
+                const buttons = stickToButtons(x, y);
+                this.setHeld("forward", buttons.forward);
+                this.setHeld("back", buttons.back);
+                this.setHeld("left", buttons.left);
+                this.setHeld("right", buttons.right);
+            },
+            look: (dx, dy) => {
+                this.yaw -= dx * this.sensitivity;
+                this.pitch = clampPitch(this.pitch - dy * this.sensitivity);
+            },
+            fire: (down) => {
+                this.firing = down;
+            },
+            jump: (down) => this.setHeld("jump", down),
+            crouch: (down) => this.setHeld("crouch", down),
+            reload: () => {
+                this.pendingReload = true;
+            },
+            switchWeapon: (weapon) => {
+                this.pendingWeapon = weapon;
+            },
+        };
+    }
+
+    private setHeld(action: string, held: boolean): void {
+        if (held) this.held.add(action);
+        else this.held.delete(action);
     }
 
     private isHeld(action: string): boolean {

@@ -34,7 +34,7 @@ import * as THREE from "three";
 
 import { AudioEngine } from "../audio/AudioEngine";
 import { SCENE_COLORS } from "../brand/tokens";
-import { InputController } from "../input/InputController";
+import { InputController, type TouchInput } from "../input/InputController";
 import type { MatchClient } from "../net/MatchClient";
 import type { ArenaWire, PlayerWire, RoomSnapshot } from "../net/protocol";
 import { Predictor } from "../sim/Predictor";
@@ -88,6 +88,12 @@ export interface SceneApp {
     requestLock(): Promise<boolean>;
     isLocked(): boolean;
     onLockedChange(cb: (locked: boolean) => void): () => void;
+    /** The touch layout's input channel (issue #17). Feeds the same
+     * intent the mouse and keyboard feed; needs no pointer lock. */
+    touchInput(): TouchInput;
+    /** Start the audio context. On desktop the pointer-lock gesture does
+     * this; a touch device never takes the lock, so its first tap does. */
+    resumeAudio(): void;
     /** Fired when a shot of ours lands, for the hit marker. */
     onHitConfirmed(cb: (headshot: boolean, killed: boolean) => void): () => void;
     /** Fired when a shot lands on us. `direction` is the bearing of the
@@ -892,6 +898,13 @@ export function createSceneApp(): SceneApp {
         },
         onLockedChange(cb) {
             return input.onLockedChange(cb);
+        },
+        touchInput() {
+            return input.touchInput();
+        },
+        resumeAudio() {
+            audio.resume();
+            audio.setStarted(true);
         },
     };
 }

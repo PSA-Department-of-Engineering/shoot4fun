@@ -1208,3 +1208,118 @@ body {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* ---------------------------------------------------------- Touch layout */
+
+/* The mobile shooting layout (issue #17): a thumbstick, a look pad and the
+ * action buttons, over a running match. Rendered only on touch devices, so
+ * it never sits in front of the desktop pointer-lock gate. `touch-action:
+ * none` stops the browser reading a drag as a scroll or a pinch, and
+ * `user-select: none` stops a long press selecting the labels; the layer
+ * itself passes pointers through, and each control claims its own. */
+.touch-controls {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-gate);
+    pointer-events: none;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.touch-controls__actions,
+.touch-controls__weapons {
+    position: absolute;
+    display: flex;
+    pointer-events: none;
+}
+
+.touch-controls__actions {
+    right: var(--space-5);
+    bottom: var(--space-6);
+    align-items: flex-end;
+    gap: var(--space-4);
+}
+
+.touch-controls__weapons {
+    right: var(--space-5);
+    top: var(--space-5);
+    gap: var(--space-3);
+}
+
+/* The look pad is the whole screen behind the controls: a drag anywhere
+ * the stick and buttons do not own turns the camera. Transparent - the
+ * HUD's crosshair reads straight through it. */
+.touch-look {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+.touch-stick {
+    position: absolute;
+    left: var(--space-5);
+    bottom: var(--space-6);
+    width: 132px;
+    height: 132px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-pill);
+    background: hsl(var(--foreground) / 0.08);
+    border: 1px solid hsl(var(--foreground) / 0.18);
+    pointer-events: auto;
+    touch-action: none;
+}
+
+.touch-stick__knob {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-pill);
+    background: hsl(var(--foreground) / 0.35);
+    border: 1px solid hsl(var(--foreground) / 0.45);
+    will-change: transform;
+}
+
+.touch-btn {
+    pointer-events: auto;
+    touch-action: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-pill);
+    border: 1px solid hsl(var(--foreground) / 0.25);
+    background: hsl(var(--foreground) / 0.1);
+    color: hsl(var(--foreground));
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+}
+
+.touch-btn:active {
+    background: hsl(var(--foreground) / 0.2);
+}
+
+.touch-btn--fire {
+    width: 96px;
+    height: 96px;
+    font-size: 0.9375rem;
+    background: hsl(var(--primary) / 0.85);
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.touch-btn--fire:active {
+    background: hsl(var(--primary));
+}
+
+.touch-btn--weapon {
+    width: 48px;
+    height: 48px;
+    font-size: 0.875rem;
+}
