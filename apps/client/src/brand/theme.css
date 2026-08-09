@@ -1073,9 +1073,41 @@ body {
     text-align: right;
 }
 
+/* The match clock, top-centre, above the score it shares the column with. */
+.hud-timer {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 34px;
+    letter-spacing: 0.04em;
+    display: none;
+}
+
+.hud-timer[data-visible="true"] {
+    display: block;
+}
+
+/* The final stretch: the clock turns and pulses so a player feels the end
+ * coming before it arrives. */
+.hud-timer[data-ending="true"] {
+    color: hsl(var(--destructive));
+    animation: hud-timer-pulse 1s var(--ease) infinite;
+}
+
+@keyframes hud-timer-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.45;
+    }
+}
+
 .hud-stats {
     position: absolute;
-    top: 24px;
+    top: 72px;
     left: 50%;
     transform: translateX(-50%);
     text-align: center;
