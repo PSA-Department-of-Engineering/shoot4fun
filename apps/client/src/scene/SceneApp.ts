@@ -572,13 +572,25 @@ export function createSceneApp(): SceneApp {
 
     /* A read-only window onto live scene state, for e2e specs.
      *
-     * Every accessor here reads an actual object the renderer is using
-     * this frame: the camera's real rotation, the predictor's real
+     * Almost every accessor here reads an actual object the renderer is
+     * using this frame: the camera's real rotation, the predictor's real
      * position, the real lock state, the animation each avatar's own
-     * state machine settled on. None of it is a constant the production
-     * code carries for a test's benefit, which is the line this surface
-     * must not cross. A spec asserting on a hardcoded literal exported
-     * from here would attest nothing.
+     * state machine settled on. Two are different in kind: `sentFrames`
+     * and `serverWord` read state the frame loop records only so a
+     * harness can diagnose a wire-vs-server divergence (issue #8) — the
+     * input frames this client actually put on the wire, and the
+     * server's own last word about this client. That recording is
+     * carried for the harness's benefit and nothing in production reads
+     * it back; the accessors below narrate why it earns its place.
+     *
+     * So the line this surface must not cross is narrower than "no
+     * state a test reads": it is a constant the production code *plants*
+     * so a spec can read a known answer back. `sentFrames` and
+     * `serverWord` are not that — they report what the client really
+     * sent and what the server really said, facts the code did not
+     * fabricate, so a spec asserting on them can still be wrong. A spec
+     * asserting on a hardcoded literal exported from here would attest
+     * nothing, and that is what stays out.
      */
     function exposeDebugSurface(): void {
         (window as unknown as { __sfDebug: unknown }).__sfDebug = {
