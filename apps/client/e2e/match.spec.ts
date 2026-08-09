@@ -191,8 +191,16 @@ async function rangeToOpponent(page: Page): Promise<number> {
 }
 
 /** One line describing where the shooter is, where it is pointing, and
- * whether its frame loop is running. Read on failure, not on success. */
-async function describeAim(page: Page, attempt: number): Promise<string> {
+ * whether its frame loop is running. Read on failure, not on success.
+ *
+ * `phase` labels when in the approach the sample was taken - "aim" before
+ * the trigger, "fired" after it - so a failing run shows both what the
+ * shooter was pointing at going in and what the burst actually spent. */
+async function describeAim(
+    page: Page,
+    attempt: number,
+    phase: string,
+): Promise<string> {
     const state = await page.evaluate(() => {
         const me = window.__sfDebug.position();
         const them = window.__sfDebug.remotes()[0] ?? null;
@@ -219,7 +227,7 @@ async function describeAim(page: Page, attempt: number): Promise<string> {
         offBy = Math.abs(d);
     }
     return (
-        `  #${attempt} at (${state.me.x.toFixed(1)}, ${state.me.z.toFixed(1)})` +
+        `  #${attempt} ${phase} at (${state.me.x.toFixed(1)}, ${state.me.z.toFixed(1)})` +
         ` target ${state.them ? `(${state.them.x.toFixed(1)}, ${state.them.z.toFixed(1)})` : "unknown"}` +
         ` range ${range.toFixed(1)}m aim-off-by ${offBy.toFixed(3)}rad` +
         ` locked=${state.locked} frames=${state.frames} ammo=${state.ammo}`
@@ -405,8 +413,16 @@ test.describe("a match", () => {
 
             for (let approach = 0; approach < 12 && lowest === 100; approach++) {
                 await aimAtOpponent(host);
-                telemetry.push(await describeAim(host, approach));
+                telemetry.push(await describeAim(host, approach, "aim"));
                 lowest = await burstAndWatch(host, guest, 1_500);
+                /* Sample again now the trigger has been held and released.
+                 * The line above is captured before the burst, so on its
+                 * own the telemetry never observes the fire frames: a shot
+                 * that never reached the wire looks identical to one that
+                 * did. This post-burst line shows the frames and ammo the
+                 * burst actually spent, so a failing run says what the
+                 * shooter was doing while firing, not only where it aimed. */
+                telemetry.push(await describeAim(host, approach, "fired"));
                 if (lowest < 100) break;
 
                 /* Nothing landed, so cover is in the way. Close in, and
