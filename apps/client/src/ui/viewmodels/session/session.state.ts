@@ -19,6 +19,10 @@ export interface SessionState {
     error: string | null;
     /** Set for the moment after the invite link is copied. */
     inviteCopied: boolean;
+    /** Whether the solo aim-training range is on (issue #15). It stands
+     * apart from the room state machine: a player enters it from the
+     * entry screen without joining a room at all. */
+    solo: boolean;
 }
 
 export const NAME_MAX_LENGTH = 16;

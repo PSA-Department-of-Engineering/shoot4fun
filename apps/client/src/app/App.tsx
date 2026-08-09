@@ -1,10 +1,15 @@
 import { selectPhase as selectMatchPhase, useRoom } from "@/ui/viewmodels/room";
-import { selectPhase as selectJoinPhase, useSession } from "@/ui/viewmodels/session";
+import {
+    selectPhase as selectJoinPhase,
+    selectSolo,
+    useSession,
+} from "@/ui/viewmodels/session";
 import { SettingsDialog } from "@/ui/views/organisms/SettingsDialog";
 import EntryPage from "@/ui/views/pages/EntryPage";
 import LobbyPage from "@/ui/views/pages/LobbyPage";
 import MatchPage from "@/ui/views/pages/MatchPage";
 import ResultsPage from "@/ui/views/pages/ResultsPage";
+import SoloPage from "@/ui/views/pages/SoloPage";
 
 import { HudLayer } from "./HudLayer";
 import { SceneStage } from "./SceneStage";
@@ -18,13 +23,18 @@ import { SceneStage } from "./SceneStage";
  */
 const App = () => {
     const joinPhase = useSession(selectJoinPhase);
+    const solo = useSession(selectSolo);
     const matchPhase = useRoom(selectMatchPhase);
 
     return (
         <>
             <SceneStage />
             <HudLayer />
-            {joinPhase !== "joined" ? (
+            {solo ? (
+                // The solo range stands apart from the room state machine
+                // (issue #15): it owns the screen while it is on.
+                <SoloPage />
+            ) : joinPhase !== "joined" ? (
                 <EntryPage />
             ) : matchPhase === "playing" ? (
                 <MatchPage />

@@ -1,8 +1,10 @@
 """Arena layout.
 
-A bounded flat ground plane populated with simple cover objects. Two
-arenas ship, `sandbox` (`MAP-001`) and `atrium` (`MAP2-002`), and the
-host picks between them from the lobby. The server carries the
+A bounded flat ground plane populated with simple cover objects. Three
+arenas ship, `sandbox` (`MAP-001`) and `atrium` (`MAP2-002`) for the
+multiplayer match, and `aimlabs` (`MAP3-003`), a bare practice range for
+the solo aim-training mode (issue #15). The host picks between them from
+the lobby, and the solo mode enters `aimlabs` on the client. The server carries the
 *server-side* layout (bounds + cover positions) for collision and
 respawn; the visual scene is the client's, built from the layout that
 arrives over the wire, so the two cannot disagree about the map.
@@ -34,7 +36,13 @@ from dataclasses import dataclass, field
 
 from shoot4fun_backend.domain.model.vec3 import Vec3
 
-__all__ = ["Arena", "ARENA_SANDBOX", "ARENA_ATRIUM", "DEFAULT_ARENAS"]
+__all__ = [
+    "Arena",
+    "ARENA_SANDBOX",
+    "ARENA_ATRIUM",
+    "ARENA_AIMLABS",
+    "DEFAULT_ARENAS",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,4 +210,36 @@ ARENA_ATRIUM = Arena(
 )
 
 
-DEFAULT_ARENAS: dict[str, Arena] = {a.id: a for a in (ARENA_SANDBOX, ARENA_ATRIUM)}
+# Aimlabs is the practice range for the solo aim-training mode (issue
+# #15): a bare, symmetric 24m room a single player enters alone to shoot
+# spawnable targets, in the spirit of Aim Lab. It carries no gameplay
+# cover, because the point is an unobstructed field the targets stand in;
+# the four low blocks are there only so the eye has scale and the floor
+# is not a featureless plane. The targets themselves are not part of the
+# layout: they are spawned, moved and scored entirely on the client,
+# which is why this arena needs no server-side match to be playable solo.
+ARENA_AIMLABS = Arena(
+    id="aimlabs",
+    name="Aim Lab",
+    blurb="A solo practice range. Enter alone and drill your aim on spawning targets.",
+    bounds_min=Vec3(-12.0, 0.0, -12.0),
+    bounds_max=Vec3(12.0, 0.0, 12.0),
+    cover=(
+        # Waist-high blocks in the corners: scale for the eye, never a
+        # sightline broken. Nothing here stands taller than the 1.6m eye.
+        CoverBox(Vec3(-8.0, 0.5, -8.0), 1.0, 0.5, 1.0),
+        CoverBox(Vec3(8.0, 0.5, -8.0), 1.0, 0.5, 1.0),
+        CoverBox(Vec3(-8.0, 0.5, 8.0), 1.0, 0.5, 1.0),
+        CoverBox(Vec3(8.0, 0.5, 8.0), 1.0, 0.5, 1.0),
+    ),
+    # One place to stand: the range is entered alone, and the player
+    # looks out across the room the targets appear in.
+    spawn_points=(
+        Vec3(0.0, 0.0, 9.0),
+    ),
+)
+
+
+DEFAULT_ARENAS: dict[str, Arena] = {
+    a.id: a for a in (ARENA_SANDBOX, ARENA_ATRIUM, ARENA_AIMLABS)
+}
