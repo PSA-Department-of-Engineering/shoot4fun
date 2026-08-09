@@ -33,6 +33,7 @@
 import * as THREE from "three";
 
 import { AudioEngine } from "../audio/AudioEngine";
+import { HapticsEngine } from "../haptics/HapticsEngine";
 import { SCENE_COLORS } from "../brand/tokens";
 import { InputController, type TouchInput } from "../input/InputController";
 import type { MatchClient } from "../net/MatchClient";
@@ -172,6 +173,7 @@ export function createSceneApp(): SceneApp {
     const shotRay = new ShotRay();
     const shots = new ShotStream();
     const audio = new AudioEngine();
+    const haptics = new HapticsEngine();
     const input = new InputController();
     const predictor = new Predictor();
     const buffer = new SnapshotBuffer();
@@ -521,6 +523,7 @@ export function createSceneApp(): SceneApp {
         firstPerson.fire();
         viewKick.recoil();
         audio.shot();
+        haptics.fire();
 
         camera.getWorldQuaternion(scratchQuaternion);
         scratchForward.set(0, 0, -1).applyQuaternion(scratchQuaternion).normalize();
@@ -586,6 +589,7 @@ export function createSceneApp(): SceneApp {
         firstPerson.damaged(0.45 + severity * 0.55);
         viewKick.jolt(0.3 + severity * 0.7);
         audio.hurt();
+        haptics.hurt();
         const direction = bearingTo(attackerId);
         for (const handler of damageHandlers) handler(direction, severity);
     }
@@ -785,6 +789,7 @@ export function createSceneApp(): SceneApp {
                     break;
                 case "hit_confirmed":
                     audio.hit();
+                    haptics.hit();
                     for (const handler of hitHandlers) {
                         handler(msg.headshot, msg.killed);
                     }

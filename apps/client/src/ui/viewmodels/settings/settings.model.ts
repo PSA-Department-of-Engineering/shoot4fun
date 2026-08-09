@@ -7,6 +7,7 @@ export const selectSensitivity = (s: SettingsState): number => s.sensitivity;
 export const selectTouchSensitivity = (s: SettingsState): number => s.touchSensitivity;
 export const selectMasterVolume = (s: SettingsState): number => s.masterVolume;
 export const selectSfxVolume = (s: SettingsState): number => s.sfxVolume;
+export const selectHapticsEnabled = (s: SettingsState): boolean => s.hapticsEnabled;
 
 /* Sensitivity is radians per pixel, which is a number no player has an
  * opinion about. Scaled up it reads like every other game's dial. */
