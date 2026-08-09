@@ -2,8 +2,15 @@
 
 The only thing a client is allowed to say about motion (`ADR-0003`).
 It carries what a human did, never what the world should become: which
-movement keys were held, where the player was looking, whether the
-trigger was down, and how long the frame covered.
+movement keys were held, whether jump or crouch were held, where the
+player was looking, whether the trigger was down, and how long the
+frame covered.
+
+`jump` and `crouch` are carried but not yet integrated into the
+movement routine: `movement.step` reads them nowhere, so motion stays
+flat (`INT-003`). Standing the vertical simulation up is delivery-scale
+work (see issue #10); this is the input contract it will read from, in
+place ahead of it so the client and the wire already speak it.
 
 `seq` is the client's monotonic frame counter. The server echoes the
 last one it consumed in every snapshot, which is what lets the client
@@ -37,6 +44,8 @@ class InputFrame:
     left: bool = False
     right: bool = False
     fire: bool = False
+    jump: bool = False
+    crouch: bool = False
     yaw: float = 0.0
     pitch: float = 0.0
 
@@ -60,6 +69,8 @@ class InputFrame:
             left=bool(buttons.get("left")),
             right=bool(buttons.get("right")),
             fire=bool(buttons.get("fire")),
+            jump=bool(buttons.get("jump")),
+            crouch=bool(buttons.get("crouch")),
             yaw=_as_float(msg.get("yaw")),
             pitch=_as_float(msg.get("pitch")),
         )

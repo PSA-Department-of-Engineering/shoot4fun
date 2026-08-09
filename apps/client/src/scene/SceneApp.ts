@@ -368,6 +368,11 @@ export function createSceneApp(): SceneApp {
                         left: sample.left,
                         right: sample.right,
                         fire: sample.fire && localAlive,
+                        // Carried to the server, which parses them; no
+                        // movement routine reads them yet, so prediction
+                        // and the shared trace are untouched (INT-003).
+                        jump: sample.jump && localAlive,
+                        crouch: sample.crouch && localAlive,
                     },
                     yaw: sample.yaw,
                     pitch: lookPitch,

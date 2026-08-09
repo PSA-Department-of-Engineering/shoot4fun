@@ -82,6 +82,13 @@ export interface InputWire {
         left: boolean;
         right: boolean;
         fire: boolean;
+        /** Jump and crouch intent. Carried on the wire and parsed by the
+         * server's `InputFrame`, but read by no movement routine yet:
+         * motion stays flat (INT-003). The vertical simulation they will
+         * drive is delivery-scale work (issue #10); this is the contract
+         * it reads from, in place ahead of it. */
+        jump: boolean;
+        crouch: boolean;
     };
     yaw: number;
     pitch: number;
