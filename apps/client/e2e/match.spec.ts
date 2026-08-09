@@ -12,6 +12,7 @@
  */
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
+import { DESYNC_THRESHOLD } from "../src/sim/Predictor";
 import { intent } from "./intent-shim";
 
 interface DebugSurface {
@@ -452,11 +453,16 @@ test.describe("a match", () => {
             // Prediction and the authoritative simulation run the same
             // routine, so on a local connection the correction each
             // snapshot applies should be nearly nothing. A large value
-            // means the two have drifted apart.
+            // means the two have drifted apart. The bound is expressed
+            // relative to the client's own DESYNC_THRESHOLD (the
+            // misprediction the Predictor deems worth flagging) so it
+            // tracks that source of truth instead of restating a bare
+            // metre value here; comfortably above it, an at-rest local
+            // client clears it without splitting hairs.
             const correction = await host.evaluate(() =>
                 window.__sfDebug.correction(),
             );
-            expect(correction).toBeLessThan(0.5);
+            expect(correction).toBeLessThan(DESYNC_THRESHOLD * 2);
         },
     );
 
