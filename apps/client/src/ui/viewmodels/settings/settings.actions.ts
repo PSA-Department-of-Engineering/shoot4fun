@@ -9,6 +9,9 @@
 
 import { create } from "zustand";
 
+import { fetchProfile, saveProfile } from "@/net/accountApi";
+import { useAccount } from "@/ui/viewmodels/account";
+
 import {
     DEFAULT_HAPTICS_ENABLED,
     DEFAULT_MASTER_VOLUME,
@@ -34,6 +37,12 @@ interface SettingsActions {
     setMasterVolume: (value: number) => void;
     setSfxVolume: (value: number) => void;
     setHapticsEnabled: (value: boolean) => void;
+    /** Adopt the account's stored preferences, for a player who just signed in
+     *  or arrived on a second device. */
+    pullFromAccount: () => Promise<void>;
+    /** Send these preferences up, for a player who just registered: the dials
+     *  they already set are the ones they meant to keep. */
+    pushToAccount: () => Promise<void>;
 }
 
 function readStored(key: string, fallback: number): number {
@@ -96,28 +105,77 @@ export const useSettings = create<SettingsState & SettingsActions>()((set) => ({
         const sensitivity = clamp(value, SENSITIVITY_MIN, SENSITIVITY_MAX);
         persist(SENSITIVITY_KEY, sensitivity);
         set({ sensitivity });
+        void pushToAccount();
     },
 
     setTouchSensitivity: (value) => {
         const touchSensitivity = clamp(value, SENSITIVITY_MIN, SENSITIVITY_MAX);
         persist(TOUCH_SENSITIVITY_KEY, touchSensitivity);
         set({ touchSensitivity });
+        void pushToAccount();
     },
 
     setMasterVolume: (value) => {
         const masterVolume = clamp(value, 0, 1);
         persist(MASTER_VOLUME_KEY, masterVolume);
         set({ masterVolume });
+        void pushToAccount();
     },
 
     setSfxVolume: (value) => {
         const sfxVolume = clamp(value, 0, 1);
         persist(SFX_VOLUME_KEY, sfxVolume);
         set({ sfxVolume });
+        void pushToAccount();
     },
 
     setHapticsEnabled: (value) => {
         persistFlag(HAPTICS_KEY, value);
         set({ hapticsEnabled: value });
+        void pushToAccount();
     },
+
+    pullFromAccount: async () => {
+        try {
+            const profile = await fetchProfile();
+            // Write through the same keys the game modules read, so the account
+            // and the local copy never disagree about what the dial is set to.
+            persist(SENSITIVITY_KEY, profile.sensitivity);
+            persist(TOUCH_SENSITIVITY_KEY, profile.touch_sensitivity);
+            persist(MASTER_VOLUME_KEY, profile.master_volume);
+            persist(SFX_VOLUME_KEY, profile.sfx_volume);
+            persistFlag(HAPTICS_KEY, profile.haptics_enabled);
+            set({
+                sensitivity: profile.sensitivity,
+                touchSensitivity: profile.touch_sensitivity,
+                masterVolume: profile.master_volume,
+                sfxVolume: profile.sfx_volume,
+                hapticsEnabled: profile.haptics_enabled,
+            });
+        } catch {
+            /* The local preferences stand; a settings sync never breaks play. */
+        }
+    },
+
+    pushToAccount,
 }));
+
+/* Preferences follow a signed-in player, and only a signed-in one: a guest's
+ * dials stay in this browser exactly as they always have. The push is
+ * fire-and-forget for the same reason the pull is: a failed sync must leave the
+ * game working, and the next change will carry the whole profile anyway. */
+async function pushToAccount(): Promise<void> {
+    if (!useAccount.getState().registered) return;
+    const s = useSettings.getState();
+    try {
+        await saveProfile({
+            sensitivity: s.sensitivity,
+            touch_sensitivity: s.touchSensitivity,
+            master_volume: s.masterVolume,
+            sfx_volume: s.sfxVolume,
+            haptics_enabled: s.hapticsEnabled,
+        });
+    } catch {
+        /* keep the local value; nothing here is worth interrupting a match for */
+    }
+}

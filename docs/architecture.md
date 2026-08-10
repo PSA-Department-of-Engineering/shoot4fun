@@ -110,7 +110,7 @@ zero and nothing moves on screen.
 | Runtime boundary | `apps/client/src/app/GameRuntime.ts` | The one door between the imperative half (scene, socket, HUD) and React. Publishes plain data. |
 | HUD | `apps/client/src/ui/hud/Hud.ts` | Crosshair, health, ammo, score, hit feedback, respawn countdown. Written per snapshot, never through a component tree. |
 | Screens | `apps/client/src/ui/views/` | Entry, lobby, results, settings and the pointer-lock gate, as atoms through pages. |
-| Screen state | `apps/client/src/ui/viewmodels/` | Session, room, settings and leaderboard, as state/actions/model triples. |
+| Screen state | `apps/client/src/ui/viewmodels/` | Session, room, settings, leaderboard and account, as state/actions/model triples. |
 
 ## The one duplicated routine
 
@@ -196,12 +196,25 @@ counter move in the playing state only.
 | --- | --- |
 | `GET /api/health` | Liveness and version. |
 | `GET /api/arenas` | The arenas a room can be set to, with the lobby's display copy. The picker is built from this, so the client carries no list of maps. |
-| `GET /api/leaderboard/{arena}` | Best score for an arena, 404 when there is none. |
-| `POST /api/leaderboard/{arena}/score` | Upsert-if-higher, body `{holder_name, score}`. |
+| `GET /api/leaderboard/{arena}` | Best score for an arena, 404 when there is none. Public, and the one read that resolves no session. |
+| `POST /api/leaderboard/{arena}/score` | Upsert-if-higher, body `{holder_name, score}`. From a session the holder is taken from the account and the body's name is ignored (ADR-0006). |
+| `POST /api/account/guest` | Mint an account and its session. The entry path; needs no credential. |
+| `GET /api/account/me` | The caller's own account. |
+| `POST /api/account/register` | Name this account and return its recovery code, once. A second call renames and mints nothing. |
+| `POST /api/account/sign-in` | Trade a display name and a recovery code for a session. |
+| `POST /api/account/rotate` | Mint a replacement code on proof of the current one; kills every other session. |
+| `POST /api/account/sign-out` | Revoke this session server-side. |
+| `GET` / `PUT /api/account/profile` | The preferences that follow a signed-in player between devices. |
 
-`Container` selects the Postgres leaderboard when `DATABASE_URL` is set
-and the in-memory one otherwise, and starts the tick unless
-`DISABLE_TICK_LOOP=1`.
+Every route but the first three resolves the caller through the one choke point
+in `AccountService`; the session travels in `X-S4F-Session` or as a bearer
+token. No handler accepts a claimed user id, a display name, or a proxy header
+as identity, and no response returns a secret or its digest except the two calls
+that mint one.
+
+`Container` selects the Postgres leaderboard and account store when
+`DATABASE_URL` is set and the in-memory ones otherwise, and starts the tick
+unless `DISABLE_TICK_LOOP=1`.
 
 ## Brand and tokens
 

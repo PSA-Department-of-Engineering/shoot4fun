@@ -300,3 +300,44 @@ INT-018:
     component: TouchControls
     type: behavior
   criticality: medium
+
+# ---- Optional player identity (#30) -----------------------------------------
+# The model is guest-with-recovery-code, selected against REF-Identity section 2
+# and recorded in ADR-0006. Three claims: the account lifecycle, the session as
+# the sole authenticator, and leaderboard attribution.
+
+INT-019:
+  version: 1.0.0
+  status: active
+  statement: "A guest is an account: the server mints one on first entry with an opaque non-derived user id and a generated display name, and registration upgrades that same account in place, so a player who registers keeps the scores they set as a guest. Registration mints a recovery code, returns it exactly once, and stores only its digest; registering an account that already holds a code renames it and mints nothing. Rotation requires the current code, mints a replacement, and invalidates every existing session. Every account carries a nullable external_issuer and external_subject, unique together and empty for a standalone player."
+  rationale: "Accounts are an obstacle to this product rather than the product, so entry must cost nothing and an account must never be a second code path that can rot. There is no email and no operator here, which closes the conforming recovery set to a saved recovery code (REF-Identity section 1), so the recovery rung is chosen with the login rung rather than deferred. Minting on a rename would let a session alone retire the owner's written-down code without presenting it, which is exactly what rotation demands proof for. The federation fields are free at creation and a live migration with a security window afterwards."
+  derived_from: [IDN-001]
+  test:
+    scope: integration
+    component: AccountService
+    type: invariant
+  criticality: critical
+
+INT-020:
+  version: 1.0.0
+  status: active
+  statement: "The opaque session token is the only authenticator: every private read and write resolves the caller through one choke point and no handler accepts a claimed user id, a display name, or a proxy header as identity. Both the recovery code and the session token are minted from the CSPRNG well above the 112-bit line and stored only as digests, compared in constant time; no response returns either secret or its digest except the calls that mint one, and the credential-accepting endpoints refuse further attempts once the account's guess budget is spent."
+  rationale: "An identifier the application publishes must never be accepted as proof of identity, which is the defect this model exists to avoid rather than repeat. Entropy decides the storage scheme rather than the credential's name (REF-Identity section 4): both secrets are drawn well above the threshold, so a fast digest is conforming and a memory-hard KDF would add only latency and a denial-of-service surface on endpoints anyone can reach. The budget is keyed on the account under attack because behind the gateway no other origin is a fact this process owns."
+  derived_from: [IDN-001]
+  test:
+    scope: integration
+    component: AccountSessionBoundary
+    type: invariant
+  criticality: critical
+
+INT-021:
+  version: 1.0.0
+  status: active
+  statement: "A score posted from an authenticated session is attributed to that account's display name and the request body's holder_name is ignored; a score posted without a session keeps the submitted name and stays unowned. Signed-in players' mouse sensitivity, touch sensitivity, master volume, SFX volume and haptics setting persist on the account and are returned to any device that presents a session; guests keep the same preferences in browser storage, unchanged."
+  rationale: "Attaching identity to an unauthenticated write surface converts an anonymous leaderboard into an attribution-forgery one: anyone could post a score under anyone's name. Taking the holder from the account rather than the body is what makes the identity worth having. Guests keep the local path exactly as it was, because the model's whole premise is that an account is optional and adding one must not make the guest experience worse."
+  derived_from: [IDN-001, LDR-002]
+  test:
+    scope: integration
+    component: LeaderboardAttribution
+    type: invariant
+  criticality: high

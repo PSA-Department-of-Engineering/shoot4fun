@@ -53,7 +53,10 @@ gateway:
   namespace: network
 hostname: shoot4fun.chaos-architect.dev
 
-# No auth for shoot4fun (identity is descoped)
+# No edge auth for shoot4fun: the app owns its own identity (ADR-0006). Players
+# are accounts the backend mints and authenticates with an opaque session token,
+# so there is no identity provider in front of the app and no secret to name
+# here. The admin surfaces other apps put behind the proxy do not exist here.
 auth:
   existingSecret: ""
 

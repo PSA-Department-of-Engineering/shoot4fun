@@ -16,7 +16,12 @@ from shoot4fun_backend import __version__
 from shoot4fun_backend.adapters.inbound.http.exception_handlers import (
     register_exception_handler,
 )
-from shoot4fun_backend.adapters.inbound.http.routers import arenas, leaderboard, system
+from shoot4fun_backend.adapters.inbound.http.routers import (
+    accounts,
+    arenas,
+    leaderboard,
+    system,
+)
 from shoot4fun_backend.container import Container
 from shoot4fun_backend.logging import configure_logging, get_logger
 
@@ -49,6 +54,11 @@ def create_app() -> FastAPI:
         leaderboard.build_router(container),
         prefix="/api",
         tags=["leaderboard"],
+    )
+    app.include_router(
+        accounts.build_router(container),
+        prefix="/api",
+        tags=["accounts"],
     )
 
     @app.websocket("/ws/match/{room_id}")

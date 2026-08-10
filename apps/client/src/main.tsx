@@ -20,6 +20,7 @@ import { createRoot } from "react-dom/client";
 
 import App from "./app/App";
 import { getGameRuntime } from "./app/GameRuntime";
+import { useAccount } from "./ui/viewmodels/account";
 import { useRoom } from "./ui/viewmodels/room";
 import { useSession } from "./ui/viewmodels/session";
 import { useSettings } from "./ui/viewmodels/settings";
@@ -54,3 +55,14 @@ createRoot(container).render(<App />);
 
 useSettings.getState().hydrate();
 useSession.getState().hydrate();
+
+/* The account resolves after the local preferences, and never blocks the
+ * render above: a guest is minted server-side on first entry, and a server
+ * that cannot be reached leaves the game entirely playable. Once an account
+ * is known, a registered player's stored preferences replace the local ones. */
+void useAccount
+    .getState()
+    .hydrate()
+    .then(() => {
+        if (useAccount.getState().registered) void useSettings.getState().pullFromAccount();
+    });

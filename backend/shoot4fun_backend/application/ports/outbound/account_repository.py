@@ -1,0 +1,50 @@
+"""Outbound port: account, session and profile storage.
+
+Three tables behind one port because they share a lifetime: deleting an account
+takes its sessions and its profile with it, and no caller ever wants one without
+the others.
+
+Only digests cross this port. The service hashes before it calls, so an
+implementation never sees a usable credential and a leaked store is not a set of
+bearer tokens.
+"""
+from __future__ import annotations
+
+from typing import Protocol
+
+from shoot4fun_backend.domain.model.account import Account
+from shoot4fun_backend.domain.model.player_profile import PlayerProfile
+
+__all__ = ["AccountRepository"]
+
+
+class AccountRepository(Protocol):
+    async def create_guest(self, user_id: str, display_name: str) -> Account: ...
+
+    async def get(self, user_id: str) -> Account | None: ...
+
+    async def find_by_display_name(self, display_name: str) -> Account | None: ...
+
+    async def find_by_external(self, issuer: str, subject: str) -> Account | None: ...
+
+    async def register(
+        self, user_id: str, display_name: str, recovery_hash: str
+    ) -> Account: ...
+
+    async def rename(self, user_id: str, display_name: str) -> Account: ...
+
+    async def recovery_hash_for(self, user_id: str) -> str | None: ...
+
+    async def set_recovery_hash(self, user_id: str, recovery_hash: str) -> None: ...
+
+    async def create_session(self, token_hash: str, user_id: str) -> None: ...
+
+    async def user_id_for_session(self, token_hash: str) -> str | None: ...
+
+    async def delete_session(self, token_hash: str) -> None: ...
+
+    async def delete_sessions_for_user(self, user_id: str) -> None: ...
+
+    async def get_profile(self, user_id: str) -> PlayerProfile | None: ...
+
+    async def save_profile(self, user_id: str, profile: PlayerProfile) -> None: ...

@@ -103,10 +103,19 @@ Server to client:
 |-------|---------|
 | `GET /api/health` | Liveness and version |
 | `GET /api/arenas` | The arenas a room can be set to, with the lobby's display copy |
-| `GET /api/leaderboard/{arena}` | Best score for an arena, 404 when there is none |
-| `POST /api/leaderboard/{arena}/score` | Upsert-if-higher, body `{holder_name, score}` |
+| `GET /api/leaderboard/{arena}` | Best score for an arena, 404 when there is none. Public |
+| `POST /api/leaderboard/{arena}/score` | Upsert-if-higher, body `{holder_name, score}`. From a session, the holder comes from the account |
+| `POST /api/account/guest` | Mint an account and its session; the entry path, no credential needed |
+| `GET /api/account/me` | The caller's own account |
+| `POST /api/account/register` | Name this account, returning its recovery code once |
+| `POST /api/account/sign-in` | Display name plus recovery code, for a session |
+| `POST /api/account/rotate` | Replace the recovery code on proof of the current one |
+| `POST /api/account/sign-out` | Revoke this session server-side |
+| `GET` / `PUT /api/account/profile` | Preferences that follow a signed-in player between devices |
 
-`DATABASE_URL` selects the Postgres leaderboard; without it the in-memory one runs. `DISABLE_TICK_LOOP=1` starts the app without the simulation task.
+The session travels in `X-S4F-Session` or as a bearer token, and is the only thing that authenticates a request (ADR-0006).
+
+`DATABASE_URL` selects the Postgres leaderboard and account store; without it the in-memory ones run. `DISABLE_TICK_LOOP=1` starts the app without the simulation task.
 
 ## Match lifecycle
 
