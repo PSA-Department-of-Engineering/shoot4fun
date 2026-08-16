@@ -47,6 +47,17 @@ _log = get_logger("account_service")
 DISPLAY_NAME_MIN = 2
 DISPLAY_NAME_MAX = 24
 
+# Sessions expire. The stakes axis caps session and inactivity lifetimes
+# (REF-Identity section 2), and the sweep below depends on it: a session that
+# never expires keeps its guest reachable for ever, so nothing is ever
+# reclaimable.
+DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+# How long a freshly minted guest is safe from the sweep.
+GUEST_GRACE_MS = 60 * 60 * 1000
+
+GUEST_NAME_ATTEMPTS = 8
+
 _ADJECTIVES = (
     "Swift", "Silent", "Crimson", "Neon", "Iron", "Rapid", "Vivid", "Lunar",
     "Solar", "Onyx", "Amber", "Cobalt", "Vector", "Zephyr", "Nova", "Echo",
@@ -83,9 +94,35 @@ def normalize_display_name(raw: str) -> str:
     return cleaned
 
 
+def guest_name(attempt: int) -> str:
+    """A generated display name, widening under pressure.
+
+    The first attempts read like a name a person would pick, because this one
+    is public wherever the account appears. A collision widens the suffix
+    rather than retrying inside the same narrow space: four digits is 2.3
+    million names and nine is 2.3 * 10^11, so the space a flood would have to
+    exhaust is not a space it can exhaust.
+
+    Width matters more than it looks. The name space is the only thing a
+    caller can consume without presenting a credential, and a narrow one turns
+    guest creation into a walk of it once it fills.
+    """
+    digits = 4 if attempt < 4 else 9
+    span = 10**digits
+    return (
+        f"{secrets.choice(_ADJECTIVES)}{secrets.choice(_NOUNS)}"
+        f"{secrets.randbelow(span - span // 10) + span // 10}"
+    )
+
+
 class AccountService:
-    def __init__(self, accounts: AccountRepository) -> None:
+    def __init__(
+        self,
+        accounts: AccountRepository,
+        session_ttl_ms: int = DEFAULT_SESSION_TTL_MS,
+    ) -> None:
         self._accounts = accounts
+        self._session_ttl_ms = session_ttl_ms
 
     # ---- entry ------------------------------------------------------------
 
@@ -93,19 +130,12 @@ class AccountService:
         """Mint a temporary account and a session for it. This is the whole
         entry path: a guest is an account from the first frame."""
         user_id = f"usr_{secrets.token_hex(12)}"
-        account = await self._accounts.create_guest(user_id, await self._unused_name())
-        token = await self._issue_session(user_id)
-        return NewSession(account=account, token=token)
-
-    async def _unused_name(self) -> str:
-        for _ in range(64):
-            candidate = (
-                f"{secrets.choice(_ADJECTIVES)}{secrets.choice(_NOUNS)}"
-                f"{secrets.randbelow(90) + 10}"
-            )
-            if await self._accounts.find_by_display_name(candidate) is None:
-                return candidate
-        return f"Player{secrets.token_hex(4)}"
+        for attempt in range(GUEST_NAME_ATTEMPTS):
+            account = await self._accounts.create_guest(user_id, guest_name(attempt))
+            if account is not None:
+                token = await self._issue_session(user_id)
+                return NewSession(account=account, token=token)
+        raise RuntimeError("could not mint an unused display name")
 
     # ---- the choke point --------------------------------------------------
 
@@ -121,11 +151,32 @@ class AccountService:
 
     async def _issue_session(self, user_id: str) -> str:
         token = mint_session_token()
-        await self._accounts.create_session(hash_secret(token), user_id)
+        await self._accounts.create_session(
+            hash_secret(token), user_id, self._session_ttl_ms
+        )
         return token
 
     async def sign_out(self, token: str) -> None:
         await self._accounts.delete_session(hash_secret(token))
+
+    async def sweep(self, grace_ms: int = GUEST_GRACE_MS) -> int:
+        """Drop expired sessions and the guests they leave unreachable.
+
+        A guest holds no credential but its session token: there is no recovery
+        code until registering mints one, and `sign_in` refuses an unregistered
+        account. So once the last session expires, nobody can ever reach that
+        row again - it is dead by construction rather than by a guess about
+        staleness, which is what makes deleting it safe.
+
+        This is also what bounds the table. Guest creation takes no credential,
+        so anyone can mint rows; sweeping unreachable ones caps the live count
+        at roughly the creation rate times the session lifetime instead of
+        letting it grow for ever.
+
+        The grace window covers the gap between minting the account and issuing
+        its first session, which are two statements.
+        """
+        return await self._accounts.sweep(grace_ms)
 
     # ---- registration and recovery ----------------------------------------
 

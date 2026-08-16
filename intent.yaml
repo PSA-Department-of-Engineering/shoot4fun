@@ -341,3 +341,15 @@ INT-021:
     component: LeaderboardAttribution
     type: invariant
   criticality: high
+INT-022:
+  version: 1.0.0
+  status: active
+  statement: "Minting a guest costs one insert per attempt and no lookup: the insert itself is the uniqueness check, so concurrent callers contending on one display name all get an answer and none fail. The generated name widens under pressure rather than retrying inside a fixed pool. A guest whose sessions have all expired is unreachable and the sweep deletes it, leaving registered accounts untouched however long they go without a session; a grace window spares an account between its creation and its first session."
+  rationale: "Guest creation is the one write a caller can make with no credential, so its cost must not grow with the table and what it leaves behind must be reclaimable. Asking whether a name is free and then inserting it is two statements with a window between them, which under concurrency loses the race and raises. A guest holds no credential but its session token, since there is no recovery code until registering mints one and sign-in refuses an unregistered account, so an expired session makes the row unreachable by construction rather than merely stale: that is what makes deleting it safe, and it is what bounds the table, since the live count then settles at roughly the creation rate times the session lifetime. REF-Identity gives this rung as buying entry without minting permanent unreapable rows; the sweep is what makes that true."
+  derived_from: [IDN-001]
+  test:
+    scope: integration
+    component: AccountService
+    type: invariant
+  criticality: high
+

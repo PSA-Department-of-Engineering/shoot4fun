@@ -19,7 +19,13 @@ __all__ = ["AccountRepository"]
 
 
 class AccountRepository(Protocol):
-    async def create_guest(self, user_id: str, display_name: str) -> Account: ...
+    async def create_guest(
+        self, user_id: str, display_name: str
+    ) -> Account | None:
+        """None when the display name is already held. The uniqueness check IS
+        the insert: asking first and inserting second leaves a window where two
+        callers both see the name free and the loser's insert raises."""
+        ...
 
     async def get(self, user_id: str) -> Account | None: ...
 
@@ -37,13 +43,20 @@ class AccountRepository(Protocol):
 
     async def set_recovery_hash(self, user_id: str, recovery_hash: str) -> None: ...
 
-    async def create_session(self, token_hash: str, user_id: str) -> None: ...
+    async def create_session(
+        self, token_hash: str, user_id: str, ttl_ms: int
+    ) -> None: ...
 
     async def user_id_for_session(self, token_hash: str) -> str | None: ...
 
     async def delete_session(self, token_hash: str) -> None: ...
 
     async def delete_sessions_for_user(self, user_id: str) -> None: ...
+
+    async def sweep(self, grace_ms: int) -> int:
+        """Drop expired sessions and every guest they leave unreachable;
+        answers with how many accounts went."""
+        ...
 
     async def get_profile(self, user_id: str) -> PlayerProfile | None: ...
 

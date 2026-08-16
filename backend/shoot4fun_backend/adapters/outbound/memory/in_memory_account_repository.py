@@ -6,6 +6,7 @@ survives a restart, which is exactly what a missing `DATABASE_URL` means.
 """
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 
 from shoot4fun_backend.application.ports.outbound.account_repository import (
@@ -26,9 +27,15 @@ class InMemoryAccountRepository(AccountRepository):
         self._accounts: dict[str, Account] = {}
         self._recovery: dict[str, str] = {}
         self._sessions: dict[str, str] = {}
+        self._expiries: dict[str, float] = {}
         self._profiles: dict[str, PlayerProfile] = {}
 
-    async def create_guest(self, user_id: str, display_name: str) -> Account:
+    async def create_guest(
+        self, user_id: str, display_name: str
+    ) -> Account | None:
+        # Mirrors the Postgres adapter: a taken name is no row, not a raise.
+        if await self.find_by_display_name(display_name) is not None:
+            return None
         account = Account(
             user_id=user_id,
             display_name=display_name,
@@ -89,18 +96,44 @@ class InMemoryAccountRepository(AccountRepository):
     async def set_recovery_hash(self, user_id: str, recovery_hash: str) -> None:
         self._recovery[user_id] = recovery_hash
 
-    async def create_session(self, token_hash: str, user_id: str) -> None:
+    async def create_session(
+        self, token_hash: str, user_id: str, ttl_ms: int
+    ) -> None:
         self._sessions[token_hash] = user_id
+        self._expiries[token_hash] = time.time() + ttl_ms / 1000
 
     async def user_id_for_session(self, token_hash: str) -> str | None:
+        expires_at = self._expiries.get(token_hash)
+        if expires_at is not None and expires_at <= time.time():
+            return None
         return self._sessions.get(token_hash)
 
     async def delete_session(self, token_hash: str) -> None:
         self._sessions.pop(token_hash, None)
+        self._expiries.pop(token_hash, None)
 
     async def delete_sessions_for_user(self, user_id: str) -> None:
         for token_hash in [t for t, u in self._sessions.items() if u == user_id]:
             del self._sessions[token_hash]
+
+    async def sweep(self, grace_ms: int) -> int:
+        now = time.time()
+        for token_hash in [t for t, e in self._expiries.items() if e <= now]:
+            self._sessions.pop(token_hash, None)
+            del self._expiries[token_hash]
+        held = set(self._sessions.values())
+        cutoff = now - grace_ms / 1000
+        reaped = 0
+        for user_id, account in list(self._accounts.items()):
+            if account.registered or user_id in held:
+                continue
+            created = datetime.fromisoformat(account.created_at).timestamp()
+            if created > cutoff:
+                continue
+            del self._accounts[user_id]
+            self._recovery.pop(user_id, None)
+            reaped += 1
+        return reaped
 
     async def get_profile(self, user_id: str) -> PlayerProfile | None:
         return self._profiles.get(user_id)

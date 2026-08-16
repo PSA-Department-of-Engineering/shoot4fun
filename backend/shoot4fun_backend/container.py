@@ -6,7 +6,9 @@ backends depending on the runtime environment. The `start()` and
 """
 from __future__ import annotations
 
+import asyncio
 import os
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from fastapi import WebSocket
@@ -44,6 +46,8 @@ __all__ = ["Container"]
 
 _log = get_logger("container")
 
+
+_SWEEP_INTERVAL_SECONDS = 15 * 60
 
 class Container:
     """Wires the outbound adapters, the use cases, and the inbound adapters."""
@@ -112,8 +116,31 @@ class Container:
                 await connect()
         if os.environ.get("DISABLE_TICK_LOOP") != "1":
             self._match_service.start_tick()
+        self._sweep_task = asyncio.create_task(self._sweep_loop())
+
+    async def _sweep_loop(self) -> None:
+        """Guest rows are minted without a credential, so the sweep is what
+        keeps the table bounded. It runs on a schedule rather than only at
+        startup, because a process that stays up for weeks would otherwise
+        never run it."""
+        while True:
+            try:
+                reaped = await self._account_service.sweep()
+                if reaped:
+                    _log.info("swept unreachable guests", extra={"reaped": reaped})
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _log.exception("sweep failed")
+            await asyncio.sleep(_SWEEP_INTERVAL_SECONDS)
 
     async def stop(self) -> None:
+        task = getattr(self, "_sweep_task", None)
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            self._sweep_task = None
         await self._match_service.stop_tick()
         for backend in (self._leaderboard, self._accounts):
             close = getattr(backend, "close", None)
