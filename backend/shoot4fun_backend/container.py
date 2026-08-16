@@ -125,9 +125,9 @@ class Container:
         never run it."""
         while True:
             try:
-                reaped = await self._account_service.sweep()
-                if reaped:
-                    _log.info("swept unreachable guests", extra={"reaped": reaped})
+                deleted = await self._account_service.sweep()
+                if deleted:
+                    _log.info("swept unreachable guests", extra={"deleted": deleted})
             except asyncio.CancelledError:
                 raise
             except Exception:

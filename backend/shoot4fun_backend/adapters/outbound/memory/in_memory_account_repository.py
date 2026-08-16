@@ -123,7 +123,7 @@ class InMemoryAccountRepository(AccountRepository):
             del self._expiries[token_hash]
         held = set(self._sessions.values())
         cutoff = now - grace_ms / 1000
-        reaped = 0
+        deleted = 0
         for user_id, account in list(self._accounts.items()):
             if account.registered or user_id in held:
                 continue
@@ -132,8 +132,8 @@ class InMemoryAccountRepository(AccountRepository):
                 continue
             del self._accounts[user_id]
             self._recovery.pop(user_id, None)
-            reaped += 1
-        return reaped
+            deleted += 1
+        return deleted
 
     async def get_profile(self, user_id: str) -> PlayerProfile | None:
         return self._profiles.get(user_id)
