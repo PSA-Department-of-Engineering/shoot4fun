@@ -37,7 +37,7 @@ export class Hud {
     private soloStreak: HTMLElement;
     private localId: string | null = null;
     private hitAt: number = 0;
-    private hitMarkerAt: number = 0;
+    private hitMarkerTimer: number | null = null;
 
     constructor(parent: HTMLElement) {
         this.root = document.createElement("div");
@@ -80,6 +80,7 @@ export class Hud {
                     <line x1="-9" y1="9" x2="-4" y2="4" />
                     <line x1="9" y1="9" x2="4" y2="4" />
                 </g>
+                <circle class="hud-hitmarker-dot" cx="0" cy="0" r="2.5" fill="none" />
             </svg>
             <div class="hud-respawn" data-respawn>RESPAWNING IN 3...</div>
             <div class="hud-hit" data-hit></div>
@@ -165,14 +166,25 @@ export class Hud {
         `;
     }
 
-    /** Confirm one of our own shots landed. */
+    /** Confirm one of our own shots landed.
+     *
+     * The marker fades itself out on a timer scheduled here, not in
+     * `update()`: the HUD can stop being driven the instant after a hit
+     * (match end, lobby, results), and the marker must never get stuck
+     * on screen when that happens. */
     markHit(headshot: boolean, killed: boolean): void {
         this.hitMarker.setAttribute("data-visible", "true");
         this.hitMarker.setAttribute(
             "data-kind",
             killed ? "kill" : headshot ? "headshot" : "hit",
         );
-        this.hitMarkerAt = performance.now();
+        if (this.hitMarkerTimer !== null) {
+            clearTimeout(this.hitMarkerTimer);
+        }
+        this.hitMarkerTimer = window.setTimeout(() => {
+            this.hitMarker.setAttribute("data-visible", "false");
+            this.hitMarkerTimer = null;
+        }, HIT_MARKER_MS);
     }
 
     update(room: RoomSnapshot): void {
@@ -208,13 +220,13 @@ export class Hud {
             this.hitIndicator.innerHTML = "";
             this.hitAt = 0;
         }
-        if (this.hitMarkerAt > 0 && now - this.hitMarkerAt > HIT_MARKER_MS) {
-            this.hitMarker.setAttribute("data-visible", "false");
-            this.hitMarkerAt = 0;
-        }
     }
 
     destroy(): void {
+        if (this.hitMarkerTimer !== null) {
+            clearTimeout(this.hitMarkerTimer);
+            this.hitMarkerTimer = null;
+        }
         this.root.remove();
     }
 }
