@@ -1,15 +1,15 @@
 ---
 phase: intent-plan
 skill: intent-session
-status: gate
+status: complete
 gate: plan
-signed: pending
+signed: 2026-08-19
 reviewed: 2026-08-19
 run: s4f-lp-001
 attempt: 1
 mode: interactive
 started: 2026-08-19T17:46:34Z
-finished: 
+finished: 2026-08-19T18:01:24Z
 credential_ref: opencode-session
 ---
 
@@ -169,3 +169,5 @@ Fallback - for an environment without the skill installed, the self-contained pa
 > Execute `.delivery/handoff.md` in `D:\Personal\shoot4fun` end to end, autonomously. The authorization in the handoff §0 applies: push to the shoot4fun repo (delivery branch → main via shared CI), reconcile the already-onboarded foundry app, use the existing `pg-app-shoot4fun` database. NOT authorized: any change to shipped shooter gameplay or the identity/auth model (INT-001…INT-022), the shop/3D-viewer/weapon-unlock scope, any new foundry manifest entry/namespace/hostname, or modifying intent.yaml claims INT-001…INT-022. Consult `.delivery/design.md`, `docs/` (ADRs + visual identity), `intent.yaml`, and the REFs the handoff references. Never stop to ask; if the handoff is silent, make the smallest reasonable choice and log it as a plan defect. Finish only at the §0 done-definition or a §10 degraded terminal state, then write the §11 final report and record it in `.delivery/build.md`.
 
 > Fresh-eyes review passed 2026-08-19 (VERDICT: PASS; artifact `.delivery/reviews/handoff-2026-08-19.md`); recorded in `reviewed:`. The plan gate awaits its signer (REF-Delivery.md section 1).
+
+> Gate closed: plan signed 2026-08-19 by CarlosDSkills over a passing fresh-eyes review (REF-Delivery.md section 1; artifact `.delivery/reviews/handoff-2026-08-19.md`). Prose above predates the closure.
