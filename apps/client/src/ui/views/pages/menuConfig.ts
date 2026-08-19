@@ -38,7 +38,7 @@ export const MENU_TILES: MenuTile[] = [
         id: "arsenal",
         title: "Arsenal",
         caption: "Your loadout and weapon unlocks (#41).",
-        status: "soon",
+        status: "ready",
     },
     {
         id: "shop",

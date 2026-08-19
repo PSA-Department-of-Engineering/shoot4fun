@@ -5,9 +5,11 @@ import { useSession } from "@/ui/viewmodels/session";
 import { Button } from "../atoms/Button";
 import { cx } from "../cx";
 import { JoinPanel } from "../organisms/JoinPanel";
+import { AccountPanel } from "../organisms/AccountPanel";
 import { Wordmark } from "../atoms/Wordmark";
 import { MenuTemplate } from "../templates/MenuTemplate";
 import { MENU_TILES, type MenuTile } from "./menuConfig";
+import Arsenal from "./Arsenal";
 
 /* The growable front door (issue #42).
  *
@@ -16,10 +18,14 @@ import { MENU_TILES, type MenuTile } from "./menuConfig";
  * rewritten when a tile is added. Tiles that are not built yet render
  * as disabled placeholders, so the menu shows the game's shape without
  * dead links. Versus opens the existing room/lobby flow; Training opens
- * the existing solo range. */
+ * the existing solo range; Arsenal (issue #41) opens the Arsenal view.
+ *
+ * The `AccountPanel` is mounted here so opt-in login is reachable from the
+ * menu without ever gating play (LOGIN-001/002): a guest simply has no
+ * account actions to take and play proceeds. */
 const MainMenu = () => {
     const enterSolo = useSession((s) => s.enterSolo);
-    const [panel, setPanel] = useState<"versus" | null>(null);
+    const [panel, setPanel] = useState<"versus" | "arsenal" | null>(null);
 
     const select = (tile: MenuTile): void => {
         if (tile.status === "soon") return;
@@ -30,9 +36,17 @@ const MainMenu = () => {
             case "training":
                 enterSolo();
                 break;
-            // coop, arsenal and shop are "soon": disabled above, never reach here.
+            case "arsenal":
+                setPanel("arsenal");
+                break;
+            // coop and shop are "soon": disabled above, never reach here.
         }
     };
+
+    // The Arsenal view is its own full screen (its own MenuTemplate, back
+    // button, and AccountPanel-free surface), so it replaces the menu rather
+    // than nesting inside it. Its back button returns to the menu (the tiles).
+    if (panel === "arsenal") return <Arsenal onBack={() => setPanel(null)} />;
 
     return (
         <MenuTemplate
@@ -45,6 +59,7 @@ const MainMenu = () => {
                     </p>
                 </>
             }
+            footer={<AccountPanel />}
         >
             {panel === "versus" ? (
                 <div className="panel">

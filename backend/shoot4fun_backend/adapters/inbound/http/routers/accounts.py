@@ -17,6 +17,8 @@ from fastapi import APIRouter, HTTPException, Request
 
 from shoot4fun_backend.adapters.inbound.http.dtos.account import (
     AccountView,
+    ArsenalPutRequest,
+    ArsenalView,
     MintedView,
     ProfileView,
     RegisterRequest,
@@ -35,6 +37,7 @@ from shoot4fun_backend.domain.exceptions.display_name_taken_error import (
     DisplayNameTakenError,
 )
 from shoot4fun_backend.domain.model.account import Account
+from shoot4fun_backend.domain.model.arsenal import PlayerArsenal
 from shoot4fun_backend.domain.model.player_profile import PlayerProfile
 
 if TYPE_CHECKING:
@@ -195,5 +198,22 @@ def build_router(container: Container) -> APIRouter:
             ),
         )
         return _profile_view(saved)
+
+    @router.get("/account/arsenal")
+    async def get_arsenal(request: Request) -> ArsenalView:
+        service: AccountService = container.account_service()
+        arsenal = await service.get_arsenal(await _require_user(request))
+        return ArsenalView.model_validate(arsenal.to_dict())
+
+    @router.put("/account/arsenal")
+    async def put_arsenal(request: Request, body: ArsenalPutRequest) -> ArsenalView:
+        """Store the arsenal envelope verbatim, including any field this
+        build does not yet name (ARS-004, INT-029)."""
+        service: AccountService = container.account_service()
+        user_id = await _require_user(request)
+        saved = await service.save_arsenal(
+            user_id, PlayerArsenal.from_dict(body.model_dump())
+        )
+        return ArsenalView.model_validate(saved.to_dict())
 
     return router

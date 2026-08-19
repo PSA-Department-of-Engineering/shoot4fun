@@ -25,6 +25,7 @@ import { useRoom } from "./ui/viewmodels/room";
 import { useSession } from "./ui/viewmodels/session";
 import { useSettings } from "./ui/viewmodels/settings";
 import "./brand/theme.css";
+import "./brand/arsenal.css";
 
 const LATENCY_POLL_MS = 2000;
 

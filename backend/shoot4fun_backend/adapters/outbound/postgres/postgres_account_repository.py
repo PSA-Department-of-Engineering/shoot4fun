@@ -12,12 +12,15 @@ cannot claim an account already linked elsewhere.
 """
 from __future__ import annotations
 
+import json
+
 import asyncpg
 
 from shoot4fun_backend.application.ports.outbound.account_repository import (
     AccountRepository,
 )
 from shoot4fun_backend.domain.model.account import Account
+from shoot4fun_backend.domain.model.arsenal import PlayerArsenal
 from shoot4fun_backend.domain.model.player_profile import PlayerProfile
 from shoot4fun_backend.logging import get_logger
 
@@ -57,6 +60,12 @@ CREATE TABLE IF NOT EXISTS account_profiles (
     sfx_volume         DOUBLE PRECISION NOT NULL,
     haptics_enabled    BOOLEAN NOT NULL,
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS account_arsenal (
+    user_id    TEXT PRIMARY KEY REFERENCES accounts (user_id) ON DELETE CASCADE,
+    envelope   JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
 
@@ -265,4 +274,34 @@ class PostgresAccountRepository(AccountRepository):
                 profile.master_volume,
                 profile.sfx_volume,
                 profile.haptics_enabled,
+            )
+
+    async def get_arsenal(self, user_id: str) -> PlayerArsenal | None:
+        async with self._ready.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT envelope FROM account_arsenal WHERE user_id = $1", user_id
+            )
+        if row is None:
+            return None
+        # asyncpg returns a JSONB column as its wire string unless a codec is
+        # registered; accept both the str form and an already-parsed dict so
+        # the envelope round-trips whichever way the driver hands it back.
+        envelope = row["envelope"]
+        if isinstance(envelope, str):
+            envelope = json.loads(envelope)
+        return PlayerArsenal.from_dict(envelope)
+
+    async def save_arsenal(self, user_id: str, arsenal: PlayerArsenal) -> None:
+        envelope = arsenal.to_dict()
+        async with self._ready.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO account_arsenal (user_id, envelope, updated_at)
+                VALUES ($1, $2, now())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    envelope = EXCLUDED.envelope,
+                    updated_at = now()
+                """,
+                user_id,
+                envelope,
             )

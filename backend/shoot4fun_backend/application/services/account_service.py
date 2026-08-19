@@ -31,6 +31,10 @@ from shoot4fun_backend.domain.exceptions.display_name_taken_error import (
     DisplayNameTakenError,
 )
 from shoot4fun_backend.domain.model.account import Account
+from shoot4fun_backend.domain.model.arsenal import (
+    DEFAULT_ARSENAL,
+    PlayerArsenal,
+)
 from shoot4fun_backend.domain.model.player_profile import DEFAULT_PROFILE, PlayerProfile
 from shoot4fun_backend.domain.model.recovery_code import (
     hash_secret,
@@ -250,6 +254,15 @@ class AccountService:
         clamped = profile.clamped()
         await self._accounts.save_profile(user_id, clamped)
         return clamped
+
+    # ---- reads and arsenal ------------------------------------------------
+
+    async def get_arsenal(self, user_id: str) -> PlayerArsenal:
+        return await self._accounts.get_arsenal(user_id) or DEFAULT_ARSENAL
+
+    async def save_arsenal(self, user_id: str, arsenal: PlayerArsenal) -> PlayerArsenal:
+        await self._accounts.save_arsenal(user_id, arsenal)
+        return arsenal
 
     # ---- federation --------------------------------------------------------
 

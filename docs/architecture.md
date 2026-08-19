@@ -205,6 +205,7 @@ counter move in the playing state only.
 | `POST /api/account/rotate` | Mint a replacement code on proof of the current one; kills every other session. |
 | `POST /api/account/sign-out` | Revoke this session server-side. |
 | `GET` / `PUT /api/account/profile` | The preferences that follow a signed-in player between devices. |
+| `GET` / `PUT /api/account/arsenal` | The player's Arsenal record (model + loadout), carried in a forward-compatible envelope that preserves unknown fields (ARS-004, ADR-0007). |
 
 Every route but the first three resolves the caller through the one choke point
 in `AccountService`; the session travels in `X-S4F-Session` or as a bearer
