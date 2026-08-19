@@ -105,6 +105,18 @@ jobs:
         working-directory: apps/client
         run: npm ci
 
+      # The runner's apt reads its mirror list from the local file
+      # /etc/apt/apt-mirrors.txt (via the `mirror+file:` source syntax),
+      # which points at an unreachable Azure mirror; `playwright install
+      # --with-deps` then hangs on apt-get for ~20min. Point that file at
+      # archive.ubuntu.com (which the runner can reach) and rewrite any
+      # direct azure host references, so the dependency install completes.
+      - name: Repoint apt at the reachable Ubuntu archive
+        run: |
+          echo 'http://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+
       - name: Install Playwright chromium
         working-directory: apps/client
         run: npx playwright install --with-deps chromium
