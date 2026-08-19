@@ -1,0 +1,107 @@
+/* ---- Arsenal view (issue #41) ----------------------------------------
+ * Token-only: the card, the one-pixel primary->accent top stripe, and
+ * muted-foreground empty copy. No new hue, font, or shape. */
+
+.arsenal {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.arsenal__panel {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    padding: 1rem;
+    position: relative;
+}
+
+.arsenal__panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(to right, hsl(var(--primary)), hsl(var(--accent)));
+}
+
+.arsenal__panel-title {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: hsl(var(--foreground));
+}
+
+.arsenal__model {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.arsenal__model-canvas {
+    width: 100%;
+    max-width: 240px;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.arsenal__model-canvas canvas {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+.arsenal__model-note {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: hsl(var(--muted-foreground));
+}
+
+.arsenal__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.arsenal__empty-copy {
+    margin: 0;
+    color: hsl(var(--muted-foreground));
+}
+
+.arsenal__empty-note {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: hsl(var(--muted-foreground));
+}
+
+.arsenal__loadout {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.arsenal__item {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: hsl(var(--secondary));
+    border-radius: var(--radius);
+}
+
+.arsenal__item-slot {
+    font-weight: 600;
+    text-transform: capitalize;
+    color: hsl(var(--foreground));
+}
+
+.arsenal__item-name {
+    color: hsl(var(--muted-foreground));
+}

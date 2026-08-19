@@ -376,12 +376,12 @@ INT-022:
 # visual this phase. This is a documented descope of that one word, not a silent
 # drop of PROF-001/002/003.
 
-# AccountPanel.tsx exists on main but is imported/rendered nowhere, so login is
-# not actually reachable. Draft because no marker names it yet: the build mounts
-# the panel into the menu surface and adds the e2e marker below.
+# AccountPanel.tsx existed on main but was imported/rendered nowhere, so login
+# was unreachable. The build mounts the panel into the menu surface and the e2e
+# marker below attests it (issue #41).
 INT-023:
   version: 1.0.0
-  status: draft
+  status: active
   statement: "Opt-in player login is surfaced in the running app through the existing AccountPanel: the panel is mounted into the menu/launch surface so a player can register a display name or sign in with a recovery code, and it is reachable but never required to enter or play a match."
   rationale: "The account service and AccountPanel component already ship on main (AccountPanel.tsx, the account viewmodels, and the INT-019/020 backend), but the panel is orphaned - imported nowhere - so the opt-in login the backend supports is unusable. LOGIN-001 is the surfacing gap: wiring the existing component into the menu. The backend half is already active under INT-019/020; this pins the client surface."
   derived_from: LOGIN-001
@@ -393,7 +393,7 @@ INT-023:
 
 INT-024:
   version: 1.0.0
-  status: draft
+  status: active
   statement: "Guests keep working and login stays non-blocking: a player reaches the main menu and starts or joins a match without registering or signing in, and any account-service failure degrades to a guest/offline session rather than blocking play."
   rationale: "Login is opt-in by design (INT-019/022 backend; hydrate() lands in an offline phase on failure). This claim pins the UI contract the backend already guarantees: the match path is never gated on a login dialog, and a failed account call must not strand the player at a wall. The existing claims attest the backend; this asserts the same from the client surface."
   derived_from: LOGIN-002
@@ -405,7 +405,7 @@ INT-024:
 
 INT-025:
   version: 1.0.0
-  status: draft
+  status: active
   statement: "Local-only settings reconcile with the server-side profile: when a signed-in player changes a preference the new value is pushed to the server, and the server's stored profile is the source of truth on the next sign-in, so a player's local edits survive across devices and never silently diverge from the server."
   rationale: "The five synced preferences (mouse sensitivity, touch sensitivity, master volume, SFX volume, haptics) already persist server-side (PlayerProfile, attested by INT-021) and the client pushes on every setter (pushToAccount, gated on registered) and pulls on sign-in (pullFromAccount). This claim asserts the reconciliation loop end to end from the client surface: local change -> server, server -> local on (re)sign-in, converging. Crosshair is excluded this phase (local HUD only); see the handoff scope note."
   derived_from: PROF-003
@@ -415,12 +415,12 @@ INT-025:
     type: behavior
   criticality: high
 
-# menuConfig.ts ships the arsenal tile as status:'soon' and MainMenu early-returns
-# on 'soon' with a disabled button, so today it is a dead link. Draft because the
-# tile is not yet 'ready' and no marker names it.
+# menuConfig.ts shipped the arsenal tile as status:'soon' and MainMenu early-returned
+# on 'soon' with a disabled button, so it was a dead link. The build flips the
+# tile to 'ready' and wires it to the Arsenal view (issue #41).
 INT-026:
   version: 1.0.0
-  status: draft
+  status: active
   statement: "The existing Arsenal main-menu tile is functional: its status is 'ready' and selecting it opens the Arsenal view, with no disabled tile and no dead link."
   rationale: "ARS-001 makes the already-present arsenal tile do something. menuConfig.ts carries the tile; this line flips its status to 'ready' and wires the selection to the Arsenal view this line builds (INT-027/028)."
   derived_from: ARS-001
@@ -431,11 +431,10 @@ INT-026:
   criticality: medium
 
 # CharacterLibrary.create(team) already loads public/models/robot.glb and returns a
-# CharacterInstance; this line surfaces it in the Arsenal view. Draft because no
-# Arsenal view exists yet to render it.
+# CharacterInstance; this line surfaces it in the Arsenal view (issue #41).
 INT-027:
   version: 1.0.0
-  status: draft
+  status: active
   statement: "The Arsenal view renders the player model - the current character/outfit rig (CharacterLibrary's loaded model) - so the player sees their avatar, with the operator/model panel clearly a placeholder until the 3D character viewer lands."
   rationale: "ARS-002 is the player-model surface. The rig primitive exists (CharacterLibrary); the 3D viewer itself is deferred (design.md out-of-scope), so the panel renders the rig/placeholder, not a full viewer. The claim is attested against the rendered rig, not the future viewer."
   derived_from: ARS-002
@@ -447,7 +446,7 @@ INT-027:
 
 INT-028:
   version: 1.0.0
-  status: draft
+  status: active
   statement: "The Arsenal view renders an inventory/loadout section that is gracefully empty when the player holds nothing: a legible empty state (for example a 'Browse shop' affordance) rather than a broken or missing panel, and the section binds to the forward-compatible Arsenal data shape (ARS-004)."
   rationale: "ARS-003 is the empty-state contract. No inventory/loadout data or section exists today, so the build renders the section empty-first and drives it from the ARS-004 shape, so the deferred shop/unlock flow drops into a structure already present."
   derived_from: ARS-003
@@ -457,13 +456,13 @@ INT-028:
     type: behavior
   criticality: medium
 
-# No Arsenal data shape exists today; the only analogous persisted struct
-# (PlayerProfile) is a fixed-field frozen dataclass that loses unknown fields and
-# needs a migration to grow. Draft because the shape and its contract test are
-# established by the build (ADR-0007).
+# No Arsenal data shape existed before this line; the only analogous persisted
+# struct (PlayerProfile) is a fixed-field frozen dataclass that loses unknown
+# fields and needs a migration to grow. The build establishes the shape and its
+# contract test (ADR-0007), attested by the integration marker below.
 INT-029:
   version: 1.0.0
-  status: draft
+  status: active
   statement: "The inventory/player-model data shape is forward-compatible: it is carried in a versioned envelope that preserves unknown fields and never drops data when the shape grows, so a future that adds weapon unlocks, outfits, or stats must not lose a player's existing Arsenal data."
   rationale: "ARS-004 is a growth-tolerance property, not a feature. The deferred shop/unlock and 3D-viewer work extends the Arsenal shape, so it must be extensible from the start: an over-shaped (future) payload round-trips through the current loader without loss or a breaking change. ADR-0007 establishes the envelope; this contract test proves an over-shaped payload survives."
   derived_from: ARS-004

@@ -148,6 +148,27 @@ export function saveProfile(profile: ProfileView): Promise<ProfileView> {
     });
 }
 
+/** The Arsenal record (ARS-004): a versioned envelope that preserves unknown
+ *  fields, so a future that adds unlocks, outfits, or stats grows the shape
+ *  without losing a player's existing data (ADR-0007). */
+export interface ArsenalView {
+    version: number;
+    model: string | null;
+    loadout: Record<string, unknown>;
+    [key: string]: unknown;
+}
+
+export function fetchArsenal(): Promise<ArsenalView> {
+    return request<ArsenalView>("/api/account/arsenal");
+}
+
+export function saveArsenal(arsenal: ArsenalView): Promise<ArsenalView> {
+    return request<ArsenalView>("/api/account/arsenal", {
+        method: "PUT",
+        body: JSON.stringify(arsenal),
+    });
+}
+
 /** The session header for a call this module does not own, so the leaderboard
  *  write can attribute a score without reaching into storage itself. */
 export function sessionHeaders(): Record<string, string> {
