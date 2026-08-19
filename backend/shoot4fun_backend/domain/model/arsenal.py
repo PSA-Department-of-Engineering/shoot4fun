@@ -10,8 +10,9 @@ it does not understand, which is the property the claim INT-029 tests.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 __all__ = ["ARSENAL_ENVELOPE_VERSION", "DEFAULT_ARSENAL", "PlayerArsenal"]
 
@@ -45,7 +46,7 @@ class PlayerArsenal:
         return data
 
     @staticmethod
-    def from_dict(data: Mapping[str, Any]) -> "PlayerArsenal":
+    def from_dict(data: Mapping[str, Any]) -> PlayerArsenal:
         extras = {k: v for k, v in data.items() if k not in _KNOWN_KEYS}
         loadout = data.get("loadout")
         return PlayerArsenal(

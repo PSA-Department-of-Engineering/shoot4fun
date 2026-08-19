@@ -11,8 +11,6 @@ from __future__ import annotations
 import pytest_intent
 from fastapi.testclient import TestClient
 
-from shoot4fun_backend.adapters.inbound.http.app import create_app
-
 SESSION = "X-S4F-Session"
 
 
