@@ -1245,7 +1245,7 @@ body {
 }
 
 .hud-hitmarker[data-visible="true"] {
-    opacity: 1;
+    opacity: 0.85;
     transform: translate(-50%, -50%) scale(1);
 }
 
@@ -1256,6 +1256,10 @@ body {
 .hud-hitmarker[data-kind="kill"] {
     stroke: hsl(var(--destructive));
     transform: translate(-50%, -50%) scale(1.25) rotate(45deg);
+}
+
+.hud-hitmarker[data-kind="kill"] .hud-hitmarker-dot {
+    fill: hsl(var(--destructive));
 }
 
 /* ------------------------------------------------------- solo range (#15)
