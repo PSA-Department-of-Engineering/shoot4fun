@@ -25,6 +25,7 @@ export const ROOM_CODE_ACCEPTED = /[^A-Z0-9]/g;
 export const selectPlayerName = (s: SessionState): string => s.playerName;
 export const selectRoomCode = (s: SessionState): string => s.roomCode;
 export const selectPhase = (s: SessionState): SessionState["phase"] => s.phase;
+export const selectScreen = (s: SessionState): SessionState["screen"] => s.screen;
 export const selectConnection = (s: SessionState): ConnectionState => s.connection;
 export const selectLatencyMs = (s: SessionState): number => s.latencyMs;
 export const selectError = (s: SessionState): string | null => s.error;
