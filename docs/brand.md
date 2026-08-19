@@ -60,8 +60,9 @@ at runtime; the four WOFF2 files live in `apps/client/public/fonts/`.
 
 The **Wordmark** role is one component,
 `apps/client/src/ui/views/atoms/Wordmark.tsx`, and applies to the three
-surfaces that announce the game itself: the entry splash
-(`views/pages/EntryPage.tsx`), the pointer-lock gate
+surfaces that announce the game itself: the launch screen
+(`views/pages/LaunchScreen.tsx`) and main menu (`views/pages/MainMenu.tsx`),
+the pointer-lock gate
 (`views/organisms/PointerLockGate.tsx`) and the "MATCH OVER" results
 banner (`views/pages/ResultsPage.tsx`). There is no
 standalone kill-count-header surface: per-match kill counts render in
