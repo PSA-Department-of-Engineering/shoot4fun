@@ -34,6 +34,10 @@ intent(
         await expect(page.locator("[data-arsenal-inventory]")).toBeVisible();
         await expect(page.locator("[data-menu-back]")).toBeVisible();
 
+        // The view is not a dead end: its back button returns to the menu.
+        await page.locator("[data-menu-back]").click();
+        await expect(page.locator('[data-tile="versus"]')).toBeVisible();
+
         await context.close();
     },
 );
@@ -47,6 +51,14 @@ intent(
 
         await page.locator('[data-tile="arsenal"]').click();
         await expect(page.locator("[data-arsenal-model]")).toBeVisible();
+        // The rig actually rendered (WebGL came up), not merely the shell.
+        await expect
+            .poll(() =>
+                page
+                    .locator("[data-arsenal-model]")
+                    .getAttribute("data-arsenal-model-rendered"),
+            )
+            .toBe("true");
         // The 3D viewer is a later line; the panel clearly says so.
         await expect(page.locator("[data-arsenal-model-placeholder]")).toBeVisible();
 

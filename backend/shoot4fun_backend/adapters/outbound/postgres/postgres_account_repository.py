@@ -12,6 +12,8 @@ cannot claim an account already linked elsewhere.
 """
 from __future__ import annotations
 
+import json
+
 import asyncpg
 
 from shoot4fun_backend.application.ports.outbound.account_repository import (
@@ -281,7 +283,12 @@ class PostgresAccountRepository(AccountRepository):
             )
         if row is None:
             return None
-        envelope = dict(row["envelope"])
+        # asyncpg returns a JSONB column as its wire string unless a codec is
+        # registered; accept both the str form and an already-parsed dict so
+        # the envelope round-trips whichever way the driver hands it back.
+        envelope = row["envelope"]
+        if isinstance(envelope, str):
+            envelope = json.loads(envelope)
         return PlayerArsenal.from_dict(envelope)
 
     async def save_arsenal(self, user_id: str, arsenal: PlayerArsenal) -> None:

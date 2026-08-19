@@ -104,15 +104,37 @@ intent(
             });
         await page.locator("[data-settings-close]").click();
 
+        // Prove the local change actually reached the server (local -> server):
+        // read the authenticated profile back until it carries 0.004, not the
+        // default. The push is fire-and-forget, so wait for the server state.
+        const token = await page.evaluate(() => window.localStorage.getItem("sf_session"));
+        await expect
+            .poll(
+                () =>
+                    page.evaluate(async (tok) => {
+                        const res = await fetch("/api/account/profile", {
+                            headers: { "X-S4F-Session": tok as string },
+                        });
+                        return res.ok ? ((await res.json()) as { sensitivity: number }).sensitivity : -1;
+                    }, token),
+            )
+            .toBe(0.004);
+
         // Sign out, then back in with the saved code.
         await page.getByRole("button", { name: "Sign out" }).click();
         await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+
+        // Divergence: force the local value away from the server's, so the
+        // poll below can only pass if sign-in PULLS the server value back
+        // (server -> local), not because the local value was already 0.004.
+        await page.evaluate(() => window.localStorage.setItem("sf_sensitivity", "0.001"));
+
         await page.getByRole("button", { name: "Sign in" }).click();
         await page.locator("#signin-name").fill(displayName);
         await page.locator("#signin-code").fill(code!);
         await page.getByRole("button", { name: "Sign in" }).click();
 
-        // Signed back in; the server's stored dial is the source of truth.
+        // Signed back in; the server's stored dial overwrote the divergent local.
         await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
         await expect
             .poll(() => page.evaluate(() => window.localStorage.getItem("sf_sensitivity")))

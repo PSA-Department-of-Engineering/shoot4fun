@@ -11,18 +11,19 @@ The view reads the locked brand tokens via `theme.css` (docs/brand.md): the
 card, the one-pixel primary->accent top stripe, the muted-foreground empty
 copy. No new hue, font, or shape.
 */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { useArsenal } from "@/ui/viewmodels/arsenal/arsenal.store";
 import { useAccount } from "@/ui/viewmodels/account";
+import { SCENE_COLORS } from "@/brand/tokens";
 
 import { Button } from "../atoms/Button";
 import { MenuTemplate } from "../templates/MenuTemplate";
 import { CharacterLibrary } from "@/scene/CharacterLibrary";
 
 const PLAYER_HEIGHT = 1.7;
-const TEAM_COLOR = new THREE.Color("#F94B1F");
+const TEAM_COLOR = new THREE.Color(SCENE_COLORS.team1);
 
 /* The rig, living in its own WebGL context. A standalone renderer/camera/loop
  * that is torn down on unmount; the shared match scene is unaffected. If the
@@ -30,6 +31,7 @@ const TEAM_COLOR = new THREE.Color("#F94B1F");
  * so the view degrades to a labelled empty slot rather than a blank box. */
 function ArsenalCharacter({ model }: { model: string | null }) {
     const host = useRef<HTMLDivElement>(null);
+    const [rendered, setRendered] = useState(false);
 
     useEffect(() => {
         const container = host.current;
@@ -52,33 +54,38 @@ function ArsenalCharacter({ model }: { model: string | null }) {
         const library = new CharacterLibrary(PLAYER_HEIGHT);
         void library.ready().then((lib) => {
             if (disposed || !lib) return;
-            instance = lib.create(TEAM_COLOR);
-            if (!instance) return;
-            scene.add(instance.root);
-            mixer = instance.mixer;
+            let ok = false;
             try {
+                instance = lib.create(TEAM_COLOR);
+                if (!instance) return;
+                scene.add(instance.root);
+                mixer = instance.mixer;
                 instance.action("idle").play();
+                renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                const resize = () => {
+                    const size = container.clientWidth || 240;
+                    renderer!.setSize(size, size, false);
+                    camera.aspect = 1;
+                    camera.updateProjectionMatrix();
+                };
+                resize();
+                container.appendChild(renderer.domElement);
+                ok = true;
+                const loop = () => {
+                    if (disposed) return;
+                    frame = requestAnimationFrame(loop);
+                    const dt = clock.getDelta();
+                    mixer?.update(dt);
+                    renderer?.render(scene, camera);
+                };
+                loop();
             } catch {
-                /* rig without an idle clip: standing silhouette is enough */
+                /* WebGL unavailable or the rig failed: the placeholder note
+                 * still shows, and the panel degrades to a labelled empty. */
+            } finally {
+                if (!disposed) setRendered(ok);
             }
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            const resize = () => {
-                const size = container.clientWidth || 240;
-                renderer!.setSize(size, size, false);
-                camera.aspect = 1;
-                camera.updateProjectionMatrix();
-            };
-            resize();
-            container.appendChild(renderer.domElement);
-            const loop = () => {
-                if (disposed) return;
-                frame = requestAnimationFrame(loop);
-                const dt = clock.getDelta();
-                mixer?.update(dt);
-                renderer?.render(scene, camera);
-            };
-            loop();
         });
 
         return () => {
@@ -88,13 +95,14 @@ function ArsenalCharacter({ model }: { model: string | null }) {
             instance?.dispose();
             if (renderer) {
                 renderer.dispose();
+                renderer.forceContextLoss();
                 renderer.domElement.remove();
             }
         };
     }, [model]);
 
     return (
-        <div className="arsenal__model" data-arsenal-model>
+        <div className="arsenal__model" data-arsenal-model data-arsenal-model-rendered={rendered}>
             <div className="arsenal__model-canvas" ref={host} aria-hidden="true" />
             <p className="arsenal__model-note" data-arsenal-model-placeholder>
                 {model ? `Model: ${model}` : "3D character viewer coming soon"}
@@ -103,8 +111,7 @@ function ArsenalCharacter({ model }: { model: string | null }) {
     );
 }
 
-const Arsenal = () => {
-    const onBack = () => window.history.length > 1 && window.history.back();
+const Arsenal = ({ onBack }: { onBack: () => void }) => {
     const registered = useAccount((s) => s.registered);
     const pullFromAccount = useArsenal((s) => s.pullFromAccount);
     const model = useArsenal((s) => s.model);

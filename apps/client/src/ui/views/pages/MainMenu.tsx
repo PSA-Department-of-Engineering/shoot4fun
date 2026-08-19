@@ -45,8 +45,8 @@ const MainMenu = () => {
 
     // The Arsenal view is its own full screen (its own MenuTemplate, back
     // button, and AccountPanel-free surface), so it replaces the menu rather
-    // than nesting inside it.
-    if (panel === "arsenal") return <Arsenal />;
+    // than nesting inside it. Its back button returns to the menu (the tiles).
+    if (panel === "arsenal") return <Arsenal onBack={() => setPanel(null)} />;
 
     return (
         <MenuTemplate
