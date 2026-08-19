@@ -271,6 +271,80 @@ body {
     border-top: 1px solid hsl(var(--border));
 }
 
+/* --------------------------------------------------- launch + main menu */
+
+/* The two ways in on the launch screen. */
+.launch {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+/* The growable front door (issue #42): a grid driven entirely by the
+ * tile list, so adding a mode or store is a data change, not a rewrite.
+ * Every tile reads a token; a literal colour here would be a defect. */
+.menu-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: var(--space-4);
+}
+
+.menu-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-5);
+    text-align: left;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition:
+        border-color var(--duration-fast) var(--ease),
+        background var(--duration-fast) var(--ease),
+        transform var(--duration-fast) var(--ease);
+}
+
+.menu-tile:hover:not(:disabled) {
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.06);
+}
+
+.menu-tile:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.menu-tile:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.menu-tile__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.menu-tile__caption {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+}
+
+.menu-tile__badge {
+    margin-top: var(--space-1);
+    padding: 0.125rem var(--space-2);
+    border-radius: var(--radius-pill);
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
 /* The locked Wordmark role (design.md §1.2 / brand.md "Typography").
  * Russo One ships one 400 file, so the browser synthesizes the 900 the
  * brand fixes; the size stays inside the locked 56-76px at every width. */

@@ -9,6 +9,11 @@ export type ConnectionState = "idle" | ConnectionStatus;
 /** Where the player stands relative to a room, not what the room is doing. */
 export type JoinPhase = "entry" | "joining" | "joined";
 
+/** Which pre-room screen is showing (issue #42). `launch` asks guest-vs-login;
+ * `menu` is the growable front door both choices land on. The room flow
+ * itself is independent of this: a joined room overrides both. */
+export type MenuScreen = "launch" | "menu";
+
 export interface SessionState {
     playerName: string;
     roomCode: string;
@@ -23,6 +28,8 @@ export interface SessionState {
      * apart from the room state machine: a player enters it from the
      * entry screen without joining a room at all. */
     solo: boolean;
+    /** Which pre-room screen is up (issue #42). */
+    screen: MenuScreen;
 }
 
 export const NAME_MAX_LENGTH = 16;

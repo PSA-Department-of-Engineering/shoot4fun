@@ -42,6 +42,13 @@ interface SessionActions {
     enterSolo: () => void;
     /** Leave the range and return to the entry screen. */
     exitSolo: () => void;
+    /** Enter as a guest: both this and `chooseLogin` land on the same
+     * main menu (issue #42). Login's own account/profile flow is #41. */
+    chooseGuest: () => void;
+    /** Enter via login. Until #41 lands this reaches the identical menu a
+     * guest gets; the split exists so a logged-in player can later carry
+     * their profile and inventory into that same menu. */
+    chooseLogin: () => void;
     noteStatus: (status: ConnectionStatus) => void;
     noteLatency: (latencyMs: number) => void;
     noteServerError: (error: ServerError) => void;
@@ -89,6 +96,7 @@ export const useSession = create<SessionState & SessionActions>()((set, get) => 
     error: null,
     inviteCopied: false,
     solo: false,
+    screen: "launch",
 
     hydrate: () => {
         const playerName = readStoredName();
@@ -164,6 +172,10 @@ export const useSession = create<SessionState & SessionActions>()((set, get) => 
         getGameRuntime().exitTraining();
         set({ solo: false });
     },
+
+    chooseGuest: () => set({ screen: "menu" }),
+
+    chooseLogin: () => set({ screen: "menu" }),
 
     /* A dropped socket leaves the player where they were, told the truth
      * about it, rather than throwing them back to the entry screen. */
