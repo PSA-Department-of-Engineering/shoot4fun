@@ -6,10 +6,14 @@ returnable than the secret it stands for.
 """
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "AccountView",
+    "ArsenalView",
+    "ArsenalPutRequest",
     "ProfileView",
     "RegisterRequest",
     "RotateRequest",
@@ -57,3 +61,28 @@ class ProfileView(BaseModel):
     master_volume: float
     sfx_volume: float
     haptics_enabled: bool
+
+
+class ArsenalView(BaseModel):
+    """A player's arsenal, including any field a future build added.
+
+    `extra="allow"` keeps unknown keys (weapon unlocks, outfits, stats) so
+    the envelope round-trips without loss: a client that does not yet know a
+    field must not strip it (ARS-004, INT-029)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    version: int = 1
+    model: str | None = None
+    loadout: dict[str, Any] = Field(default_factory=dict)
+
+
+class ArsenalPutRequest(BaseModel):
+    """The same envelope on the way in. Accepts the known keys plus any
+    forward-shaped field; the service stores it verbatim (ADR-0007)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    version: int = 1
+    model: str | None = None
+    loadout: dict[str, Any] = Field(default_factory=dict)

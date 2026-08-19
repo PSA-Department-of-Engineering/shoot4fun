@@ -72,7 +72,7 @@ When the done-definition requires the app live, executing §8 end to end is in-g
 | ADR-0006 | Optional player identity (guest + recovery code) — already landed; this line surfaces it, does not change it. |
 | ADR-0007 (NEW, build authors) | Arsenal data shape: a versioned envelope that preserves unknown fields (forward-compatible per ARS-004). Established before the Arsenal view is coded. |
 
-<layout sketch: this line adds no top-level entry. It (a) mounts `AccountPanel` into the menu/launch surface, (b) adds `apps/client/src/ui/views/pages/Arsenal.tsx` (or equivalent) rendering the `CharacterLibrary` rig + an inventory/loadout section bound to the ARS-004 shape, (c) flips the `arsenal` tile to `status: "ready"` in `menuConfig.ts`, (d) adds a backend Arsenal profile module + contract test for the forward-compatible envelope.>
+**Layout sketch.** This line adds no top-level entry. It (a) mounts `AccountPanel` into the menu/launch surface, (b) adds `apps/client/src/ui/views/pages/Arsenal.tsx` (or equivalent) rendering the `CharacterLibrary` rig + an inventory/loadout section bound to the ARS-004 shape, (c) flips the `arsenal` tile to `status: "ready"` in `menuConfig.ts`, (d) adds a backend Arsenal profile module + contract test for the forward-compatible envelope.
 
 ## 4. Data pipeline / integrations
 

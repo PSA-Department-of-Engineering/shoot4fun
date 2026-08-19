@@ -13,6 +13,7 @@ from shoot4fun_backend.application.ports.outbound.account_repository import (
     AccountRepository,
 )
 from shoot4fun_backend.domain.model.account import Account
+from shoot4fun_backend.domain.model.arsenal import PlayerArsenal
 from shoot4fun_backend.domain.model.player_profile import PlayerProfile
 
 __all__ = ["InMemoryAccountRepository"]
@@ -29,6 +30,7 @@ class InMemoryAccountRepository(AccountRepository):
         self._sessions: dict[str, str] = {}
         self._expiries: dict[str, float] = {}
         self._profiles: dict[str, PlayerProfile] = {}
+        self._arsenals: dict[str, PlayerArsenal] = {}
 
     async def create_guest(
         self, user_id: str, display_name: str
@@ -140,3 +142,9 @@ class InMemoryAccountRepository(AccountRepository):
 
     async def save_profile(self, user_id: str, profile: PlayerProfile) -> None:
         self._profiles[user_id] = profile
+
+    async def get_arsenal(self, user_id: str) -> PlayerArsenal | None:
+        return self._arsenals.get(user_id)
+
+    async def save_arsenal(self, user_id: str, arsenal: PlayerArsenal) -> None:
+        self._arsenals[user_id] = arsenal

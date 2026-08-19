@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from shoot4fun_backend.domain.model.account import Account
+from shoot4fun_backend.domain.model.arsenal import PlayerArsenal
 from shoot4fun_backend.domain.model.player_profile import PlayerProfile
 
 __all__ = ["AccountRepository"]
@@ -61,3 +62,7 @@ class AccountRepository(Protocol):
     async def get_profile(self, user_id: str) -> PlayerProfile | None: ...
 
     async def save_profile(self, user_id: str, profile: PlayerProfile) -> None: ...
+
+    async def get_arsenal(self, user_id: str) -> PlayerArsenal | None: ...
+
+    async def save_arsenal(self, user_id: str, arsenal: PlayerArsenal) -> None: ...
