@@ -29,6 +29,7 @@ class InMemoryAccountRepository(AccountRepository):
         self._sessions: dict[str, str] = {}
         self._expiries: dict[str, float] = {}
         self._profiles: dict[str, PlayerProfile] = {}
+        self._arsenal: dict[str, dict] = {}
 
     async def create_guest(
         self, user_id: str, display_name: str
@@ -140,3 +141,9 @@ class InMemoryAccountRepository(AccountRepository):
 
     async def save_profile(self, user_id: str, profile: PlayerProfile) -> None:
         self._profiles[user_id] = profile
+
+    async def get_arsenal(self, user_id: str) -> dict | None:
+        return self._arsenal.get(user_id)
+
+    async def save_arsenal(self, user_id: str, envelope: dict) -> None:
+        self._arsenal[user_id] = envelope

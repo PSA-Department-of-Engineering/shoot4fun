@@ -12,6 +12,8 @@ cannot claim an account already linked elsewhere.
 """
 from __future__ import annotations
 
+import json
+
 import asyncpg
 
 from shoot4fun_backend.application.ports.outbound.account_repository import (
@@ -57,6 +59,12 @@ CREATE TABLE IF NOT EXISTS account_profiles (
     sfx_volume         DOUBLE PRECISION NOT NULL,
     haptics_enabled    BOOLEAN NOT NULL,
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS arsenal_profiles (
+    user_id   TEXT PRIMARY KEY REFERENCES accounts (user_id) ON DELETE CASCADE,
+    payload   JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
 
@@ -265,4 +273,30 @@ class PostgresAccountRepository(AccountRepository):
                 profile.master_volume,
                 profile.sfx_volume,
                 profile.haptics_enabled,
+            )
+
+    async def get_arsenal(self, user_id: str) -> dict | None:
+        async with self._ready.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT payload FROM arsenal_profiles WHERE user_id = $1", user_id
+            )
+        # asyncpg decodes a jsonb column to a dict by default; if a custom
+        # codec left it as text, decode it before the envelope parse.
+        if row is None:
+            return None
+        payload = row["payload"]
+        return json.loads(payload) if isinstance(payload, str) else payload
+
+    async def save_arsenal(self, user_id: str, envelope: dict) -> None:
+        async with self._ready.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO arsenal_profiles (user_id, payload, updated_at)
+                VALUES ($1, $2::jsonb, now())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    payload = EXCLUDED.payload,
+                    updated_at = now()
+                """,
+                user_id,
+                json.dumps(envelope),
             )

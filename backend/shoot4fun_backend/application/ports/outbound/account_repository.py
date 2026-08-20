@@ -61,3 +61,12 @@ class AccountRepository(Protocol):
     async def get_profile(self, user_id: str) -> PlayerProfile | None: ...
 
     async def save_profile(self, user_id: str, profile: PlayerProfile) -> None: ...
+
+    async def get_arsenal(self, user_id: str) -> dict | None:
+        """The player's Arsenal envelope as stored, or None when nothing has
+        been written yet. The value is an opaque dict; the service validates it
+        through the domain model, so a caller never sees an ill-formed payload."""
+
+    async def save_arsenal(self, user_id: str, envelope: dict) -> None:
+        """Persist the Arsenal envelope for a player. Unknown fields inside the
+        envelope's data object are kept, so a future shape grows without loss."""
