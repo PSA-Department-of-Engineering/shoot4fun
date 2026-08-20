@@ -1,3 +1,18 @@
+---
+phase: build-ship
+skill: run-delivery-plan
+status: gate
+gate: delivery
+signed: pending
+reviewed: 2026-08-20
+run: 
+attempt: 1
+mode: interactive
+started: 2026-08-20T10:31:39Z
+finished: 
+credential_ref: 
+---
+
 # build.md — shoot4fun (Login, Profile & Arsenal / P1)
 
 Build-and-ship log for the P1 delivery line (issue #41) over the already-shipped
@@ -79,3 +94,5 @@ no foundry contract file changed.
    `python stamp_gate.py --repo D:\Personal\shoot4fun --record build.md --date <acceptance date> --by "<the customer>"`
 3. Then run `reconcile-delivery D:\Personal\shoot4fun` (the lifecycle's close; its
    pre-flight refuses an unsigned delivery gate).
+
+> Fresh-eyes review passed 2026-08-20 (VERDICT: PASS; artifact `.delivery/reviews/build-2026-08-20.md`); recorded in `reviewed:`. The delivery gate awaits its signer (REF-Delivery.md section 1).
