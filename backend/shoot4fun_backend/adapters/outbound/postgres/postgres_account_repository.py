@@ -62,9 +62,9 @@ CREATE TABLE IF NOT EXISTS account_profiles (
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS account_arsenal (
-    user_id    TEXT PRIMARY KEY REFERENCES accounts (user_id) ON DELETE CASCADE,
-    envelope   JSONB NOT NULL,
+CREATE TABLE IF NOT EXISTS arsenal_profiles (
+    user_id   TEXT PRIMARY KEY REFERENCES accounts (user_id) ON DELETE CASCADE,
+    payload   JSONB NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
@@ -276,32 +276,28 @@ class PostgresAccountRepository(AccountRepository):
                 profile.haptics_enabled,
             )
 
-    async def get_arsenal(self, user_id: str) -> PlayerArsenal | None:
+    async def get_arsenal(self, user_id: str) -> dict | None:
         async with self._ready.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT envelope FROM account_arsenal WHERE user_id = $1", user_id
+                "SELECT payload FROM arsenal_profiles WHERE user_id = $1", user_id
             )
+        # asyncpg decodes a jsonb column to a dict by default; if a custom
+        # codec left it as text, decode it before the envelope parse.
         if row is None:
             return None
-        # asyncpg returns a JSONB column as its wire string unless a codec is
-        # registered; accept both the str form and an already-parsed dict so
-        # the envelope round-trips whichever way the driver hands it back.
-        envelope = row["envelope"]
-        if isinstance(envelope, str):
-            envelope = json.loads(envelope)
-        return PlayerArsenal.from_dict(envelope)
+        payload = row["payload"]
+        return json.loads(payload) if isinstance(payload, str) else payload
 
-    async def save_arsenal(self, user_id: str, arsenal: PlayerArsenal) -> None:
-        envelope = arsenal.to_dict()
+    async def save_arsenal(self, user_id: str, envelope: dict) -> None:
         async with self._ready.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO account_arsenal (user_id, envelope, updated_at)
-                VALUES ($1, $2, now())
+                INSERT INTO arsenal_profiles (user_id, payload, updated_at)
+                VALUES ($1, $2::jsonb, now())
                 ON CONFLICT (user_id) DO UPDATE SET
-                    envelope = EXCLUDED.envelope,
+                    payload = EXCLUDED.payload,
                     updated_at = now()
                 """,
                 user_id,
-                envelope,
+                json.dumps(envelope),
             )

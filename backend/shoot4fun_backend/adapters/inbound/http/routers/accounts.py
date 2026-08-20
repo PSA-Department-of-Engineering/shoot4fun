@@ -200,20 +200,25 @@ def build_router(container: Container) -> APIRouter:
         return _profile_view(saved)
 
     @router.get("/account/arsenal")
-    async def get_arsenal(request: Request) -> ArsenalView:
+    async def get_arsenal(request: Request) -> dict:
+        """The player's loadout and inventory, as a versioned envelope.
+
+        Returns an empty envelope when nothing has been written, so a client can
+        render the Arsenal view's empty state without a special case."""
         service: AccountService = container.account_service()
-        arsenal = await service.get_arsenal(await _require_user(request))
-        return ArsenalView.model_validate(arsenal.to_dict())
+        return await service.get_arsenal(await _require_user(request)) or {
+            "version": 1,
+            "data": {},
+        }
 
     @router.put("/account/arsenal")
-    async def put_arsenal(request: Request, body: ArsenalPutRequest) -> ArsenalView:
-        """Store the arsenal envelope verbatim, including any field this
-        build does not yet name (ARS-004, INT-029)."""
+    async def put_arsenal(request: Request, body: dict) -> dict:
+        """Store the Arsenal envelope. Unknown fields inside `data` are kept, so
+        a future that grows the shape loses no player data (ARS-004)."""
         service: AccountService = container.account_service()
-        user_id = await _require_user(request)
-        saved = await service.save_arsenal(
-            user_id, PlayerArsenal.from_dict(body.model_dump())
-        )
-        return ArsenalView.model_validate(saved.to_dict())
+        try:
+            return await service.save_arsenal(await _require_user(request), body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return router

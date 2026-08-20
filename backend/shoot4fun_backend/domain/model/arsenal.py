@@ -1,65 +1,47 @@
-"""The Arsenal data shape: the inventory/loadout that follows a signed-in
-player across devices (ARS-004).
+"""The Arsenal data shape: a forward-compatible envelope (ARS-004, ADR-0007).
 
-It is a versioned envelope that preserves unknown fields, so a future that
-adds weapon unlocks, outfits, or stats grows the shape without losing a
-player's existing data (ADR-0007). The known keys today are `model` (the
-player-model id) and `loadout` (a bag of slot -> item); everything else is
-carried in `extras` and round-trips untouched. The server never drops a key
-it does not understand, which is the property the claim INT-029 tests.
+A player's inventory and loadout will grow - weapon unlocks, outfits, stats -
+so the shape that stores it must absorb new fields without a migration and
+without dropping data a future client wrote. The envelope wraps an opaque
+`data` object; unknown keys inside it round-trip untouched, and a newer
+`version` is still readable, so a future that adds fields must not lose what a
+player already has.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-__all__ = ["ARSENAL_ENVELOPE_VERSION", "DEFAULT_ARSENAL", "PlayerArsenal"]
+__all__ = ["ArsenalEnvelope", "ARSENAL_VERSION"]
 
-ARSENAL_ENVELOPE_VERSION = 1
-
-_KNOWN_KEYS = ("version", "model", "loadout")
+ARSENAL_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)
-class PlayerArsenal:
-    """A player's arsenal, carried in a forward-compatible envelope.
-
-    `version` is the envelope version, not the game's; `model` is the
-    player-model id the Arsenal view renders, `loadout` the current
-    inventory/loadout, and `extras` every field the current build does not
-    name - preserved so a future shape can read what an older client wrote.
-    """
-
+class ArsenalEnvelope:
     version: int
-    model: str | None
-    loadout: Mapping[str, Any]
-    extras: Mapping[str, Any]
+    data: dict[str, Any]
+
+    @classmethod
+    def parse(cls, raw: object) -> "ArsenalEnvelope":
+        """Read an envelope back, refusing anything that is not a versioned
+        object with a data payload. The data object is kept verbatim, so keys
+        a future shape added survive the round-trip."""
+        if not isinstance(raw, dict):
+            raise ValueError("arsenal envelope must be an object")
+        version = raw.get("version")
+        if (
+            not isinstance(version, int)
+            or isinstance(version, bool)
+            or version < ARSENAL_VERSION
+        ):
+            raise ValueError("arsenal envelope needs a positive integer version")
+        data = raw.get("data")
+        if not isinstance(data, dict):
+            raise ValueError("arsenal envelope needs a data object")
+        return cls(version=version, data=data)
 
     def to_dict(self) -> dict[str, Any]:
-        data: dict[str, Any] = {
-            "version": self.version,
-            "model": self.model,
-            "loadout": dict(self.loadout),
-        }
-        data.update(self.extras)
-        return data
-
-    @staticmethod
-    def from_dict(data: Mapping[str, Any]) -> PlayerArsenal:
-        extras = {k: v for k, v in data.items() if k not in _KNOWN_KEYS}
-        loadout = data.get("loadout")
-        return PlayerArsenal(
-            version=int(data.get("version", ARSENAL_ENVELOPE_VERSION)),
-            model=data.get("model"),
-            loadout=dict(loadout) if isinstance(loadout, Mapping) else {},
-            extras=extras,
-        )
-
-
-DEFAULT_ARSENAL = PlayerArsenal(
-    version=ARSENAL_ENVELOPE_VERSION,
-    model=None,
-    loadout={},
-    extras={},
-)
+        """Emit the envelope exactly as stored: version plus the untouched
+        data payload, so nothing written into `data` is lost on the way out."""
+        return {"version": self.version, "data": self.data}

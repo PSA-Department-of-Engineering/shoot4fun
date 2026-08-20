@@ -31,10 +31,7 @@ from shoot4fun_backend.domain.exceptions.display_name_taken_error import (
     DisplayNameTakenError,
 )
 from shoot4fun_backend.domain.model.account import Account
-from shoot4fun_backend.domain.model.arsenal import (
-    DEFAULT_ARSENAL,
-    PlayerArsenal,
-)
+from shoot4fun_backend.domain.model.arsenal import ArsenalEnvelope
 from shoot4fun_backend.domain.model.player_profile import DEFAULT_PROFILE, PlayerProfile
 from shoot4fun_backend.domain.model.recovery_code import (
     hash_secret,
@@ -255,14 +252,26 @@ class AccountService:
         await self._accounts.save_profile(user_id, clamped)
         return clamped
 
-    # ---- reads and arsenal ------------------------------------------------
+    # ---- arsenal ---------------------------------------------------------
 
-    async def get_arsenal(self, user_id: str) -> PlayerArsenal:
-        return await self._accounts.get_arsenal(user_id) or DEFAULT_ARSENAL
+    async def get_arsenal(self, user_id: str) -> dict | None:
+        """The player's Arsenal envelope, or None when nothing is stored yet.
 
-    async def save_arsenal(self, user_id: str, arsenal: PlayerArsenal) -> PlayerArsenal:
-        await self._accounts.save_arsenal(user_id, arsenal)
-        return arsenal
+        Read through the domain model, so an ill-formed stored payload is
+        refused rather than surfaced, while everything inside `data` survives
+        untouched (ARS-004, ADR-0007)."""
+        stored = await self._accounts.get_arsenal(user_id)
+        if stored is None:
+            return None
+        return ArsenalEnvelope.parse(stored).to_dict()
+
+    async def save_arsenal(self, user_id: str, envelope: dict) -> dict:
+        """Store the Arsenal envelope, refusing anything that is not a valid
+        versioned object. The data payload is kept as given so future fields are
+        never dropped (ARS-004, ADR-0007)."""
+        ArsenalEnvelope.parse(envelope)
+        await self._accounts.save_arsenal(user_id, envelope)
+        return envelope
 
     # ---- federation --------------------------------------------------------
 
