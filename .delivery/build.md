@@ -1,15 +1,15 @@
 ---
 phase: build-ship
 skill: run-delivery-plan
-status: gate
+status: complete
 gate: delivery
-signed: pending
+signed: 2026-08-20
 reviewed: 2026-08-20
 run: 
 attempt: 1
 mode: interactive
 started: 2026-08-20T10:31:39Z
-finished: 
+finished: 2026-08-20T10:53:05Z
 credential_ref: 
 ---
 
@@ -96,3 +96,5 @@ no foundry contract file changed.
    pre-flight refuses an unsigned delivery gate).
 
 > Fresh-eyes review passed 2026-08-20 (VERDICT: PASS; artifact `.delivery/reviews/build-2026-08-20.md`); recorded in `reviewed:`. The delivery gate awaits its signer (REF-Delivery.md section 1).
+
+> Gate closed: delivery signed 2026-08-20 by Carlos Dias over a passing fresh-eyes review (REF-Delivery.md section 1). Prose above predates the closure.
