@@ -49,6 +49,10 @@ interface SessionActions {
      * guest gets; the split exists so a logged-in player can later carry
      * their profile and inventory into that same menu. */
     chooseLogin: () => void;
+    /** Open the Arsenal view from the main menu (issue #41). */
+    enterArsenal: () => void;
+    /** Leave the Arsenal view and return to the main menu. */
+    exitArsenal: () => void;
     noteStatus: (status: ConnectionStatus) => void;
     noteLatency: (latencyMs: number) => void;
     noteServerError: (error: ServerError) => void;
@@ -176,6 +180,10 @@ export const useSession = create<SessionState & SessionActions>()((set, get) => 
     chooseGuest: () => set({ screen: "menu" }),
 
     chooseLogin: () => set({ screen: "menu" }),
+
+    enterArsenal: () => set({ screen: "arsenal" }),
+
+    exitArsenal: () => set({ screen: "menu" }),
 
     /* A dropped socket leaves the player where they were, told the truth
      * about it, rather than throwing them back to the entry screen. */
