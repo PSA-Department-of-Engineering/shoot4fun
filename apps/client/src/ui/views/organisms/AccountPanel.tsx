@@ -9,7 +9,6 @@ import {
     selectDisplayName,
     selectHasAccount,
     selectRegistered,
-    selectRevealedCode,
     useAccount,
 } from "@/ui/viewmodels/account";
 
@@ -21,54 +20,40 @@ import { FormField } from "../molecules/FormField";
  *
  * A guest already has an account and a name, so this panel never gates a
  * match: it reports the name and offers two optional acts beside it. Keeping
- * a name across devices is the only thing registering buys. */
+ * a name and a password across devices is the only thing creating an account
+ * buys. */
 export const AccountPanel = () => {
     const hasAccount = useAccount(selectHasAccount);
     const displayName = useAccount(selectDisplayName);
     const registered = useAccount(selectRegistered);
     const dialog = useAccount(selectDialog);
-    const revealedCode = useAccount(selectRevealedCode);
     const error = useAccount(selectAccountError);
     const busy = useAccount(selectAccountBusy);
     const openDialog = useAccount((s) => s.openDialog);
     const closeDialog = useAccount((s) => s.closeDialog);
-    const dismissCode = useAccount((s) => s.dismissCode);
-    const register = useAccount((s) => s.register);
+    const createAccount = useAccount((s) => s.createAccount);
     const signIn = useAccount((s) => s.signIn);
+    const changePassword = useAccount((s) => s.changePassword);
     const signOut = useAccount((s) => s.signOut);
 
     const [nameDraft, setNameDraft] = useState("");
+    const [createPassword, setCreatePassword] = useState("");
     const [signInName, setSignInName] = useState("");
-    const [signInCode, setSignInCode] = useState("");
+    const [signInPassword, setSignInPassword] = useState("");
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
 
     if (!hasAccount) return null;
 
-    if (revealedCode) {
-        return (
-            <section className="account account--reveal" data-account-reveal>
-                <h2 className="account__title">Save your recovery code</h2>
-                <p className="account__lead">
-                    This is the only time it is shown. With your name it signs you in on any
-                    device.
-                </p>
-                <output className="account__code" data-recovery-code>
-                    {revealedCode}
-                </output>
-                <Button variant="primary" block onClick={dismissCode}>
-                    I saved it
-                </Button>
-            </section>
-        );
-    }
-
-    if (dialog === "register") {
+    if (dialog === "create") {
         const submit = (event: FormEvent) => {
             event.preventDefault();
-            if (isDisplayNameValid(nameDraft)) void register(nameDraft);
+            if (isDisplayNameValid(nameDraft) && createPassword)
+                void createAccount(nameDraft, createPassword);
         };
         return (
             <form className="account" onSubmit={submit}>
-                <h2 className="account__title">Keep this name</h2>
+                <h2 className="account__title">Create account</h2>
                 <FormField htmlFor="account-name" label="Display name">
                     <TextField
                         id="account-name"
@@ -79,6 +64,15 @@ export const AccountPanel = () => {
                         onChange={(event) => setNameDraft(event.target.value)}
                     />
                 </FormField>
+                <FormField htmlFor="account-password" label="Password">
+                    <TextField
+                        id="account-password"
+                        type="password"
+                        value={createPassword}
+                        autoFocus
+                        onChange={(event) => setCreatePassword(event.target.value)}
+                    />
+                </FormField>
                 {error && <p className="account__error">{error}</p>}
                 <div className="account__row">
                     <Button variant="ghost" onClick={closeDialog}>
@@ -86,10 +80,10 @@ export const AccountPanel = () => {
                     </Button>
                     <Button
                         variant="primary"
-                        disabled={busy || !isDisplayNameValid(nameDraft)}
+                        disabled={busy || !isDisplayNameValid(nameDraft) || !createPassword}
                         type="submit"
                     >
-                        {busy ? "Saving" : "Save"}
+                        {busy ? "Creating" : "Create"}
                     </Button>
                 </div>
             </form>
@@ -99,7 +93,8 @@ export const AccountPanel = () => {
     if (dialog === "signIn") {
         const submit = (event: FormEvent) => {
             event.preventDefault();
-            if (signInName.trim() && signInCode.trim()) void signIn(signInName, signInCode);
+            if (signInName.trim() && signInPassword)
+                void signIn(signInName, signInPassword);
         };
         return (
             <form className="account" onSubmit={submit}>
@@ -113,11 +108,12 @@ export const AccountPanel = () => {
                         onChange={(event) => setSignInName(event.target.value)}
                     />
                 </FormField>
-                <FormField htmlFor="signin-code" label="Recovery code">
+                <FormField htmlFor="signin-password" label="Password">
                     <TextField
-                        id="signin-code"
-                        value={signInCode}
-                        onChange={(event) => setSignInCode(event.target.value)}
+                        id="signin-password"
+                        type="password"
+                        value={signInPassword}
+                        onChange={(event) => setSignInPassword(event.target.value)}
                     />
                 </FormField>
                 {error && <p className="account__error">{error}</p>}
@@ -127,10 +123,51 @@ export const AccountPanel = () => {
                     </Button>
                     <Button
                         variant="primary"
-                        disabled={busy || !signInName.trim() || !signInCode.trim()}
+                        disabled={busy || !signInName.trim() || !signInPassword}
                         type="submit"
                     >
                         {busy ? "Checking" : "Sign in"}
+                    </Button>
+                </div>
+            </form>
+        );
+    }
+
+    if (dialog === "changePassword") {
+        const submit = (event: FormEvent) => {
+            event.preventDefault();
+            if (currentPassword && newPassword)
+                void changePassword(currentPassword, newPassword);
+        };
+        return (
+            <form className="account" onSubmit={submit}>
+                <h2 className="account__title">Change password</h2>
+                <FormField htmlFor="change-current" label="Current password">
+                    <TextField
+                        id="change-current"
+                        type="password"
+                        autoFocus
+                        onChange={(event) => setCurrentPassword(event.target.value)}
+                    />
+                </FormField>
+                <FormField htmlFor="change-new" label="New password">
+                    <TextField
+                        id="change-new"
+                        type="password"
+                        onChange={(event) => setNewPassword(event.target.value)}
+                    />
+                </FormField>
+                {error && <p className="account__error">{error}</p>}
+                <div className="account__row">
+                    <Button variant="ghost" onClick={closeDialog}>
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="primary"
+                        disabled={busy || !currentPassword || !newPassword}
+                        type="submit"
+                    >
+                        {busy ? "Updating" : "Update"}
                     </Button>
                 </div>
             </form>
@@ -145,13 +182,18 @@ export const AccountPanel = () => {
             </p>
             <div className="account__row">
                 {registered ? (
-                    <Button variant="ghost" onClick={() => void signOut()} disabled={busy}>
-                        Sign out
-                    </Button>
+                    <>
+                        <Button variant="ghost" onClick={() => openDialog("changePassword")}>
+                            Change password
+                        </Button>
+                        <Button variant="ghost" onClick={() => void signOut()} disabled={busy}>
+                            Sign out
+                        </Button>
+                    </>
                 ) : (
                     <>
-                        <Button variant="ghost" onClick={() => openDialog("register")}>
-                            Keep this name
+                        <Button variant="ghost" onClick={() => openDialog("create")}>
+                            Create account
                         </Button>
                         <Button variant="ghost" onClick={() => openDialog("signIn")}>
                             Sign in

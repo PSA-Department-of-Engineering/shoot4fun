@@ -5,7 +5,6 @@ import { ACCOUNT_NAME_MAX, ACCOUNT_NAME_MIN, type AccountState } from "./account
 export const selectDisplayName = (s: AccountState) => s.displayName;
 export const selectRegistered = (s: AccountState) => s.registered;
 export const selectDialog = (s: AccountState) => s.dialog;
-export const selectRevealedCode = (s: AccountState) => s.revealedCode;
 export const selectAccountError = (s: AccountState) => s.error;
 export const selectAccountBusy = (s: AccountState) => s.busy;
 

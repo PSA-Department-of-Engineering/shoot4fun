@@ -1,15 +1,15 @@
 """Accounts, sessions and profiles: one service, one way in.
 
-The model is guest-with-recovery-code, selected against `REF-Identity.md`
-section 2 and recorded in ADR-004. The short version: what is lost when an
-account is taken here is a leaderboard rank, there is no PII, and an account is
-an obstacle to the product rather than the product.
+The model is guest-first with a password credential, selected against
+`REF-Identity.md` section 2 and recorded in ADR-004. The short version: what is
+lost when an account is taken here is a leaderboard rank, there is no PII, and an
+account is an obstacle to the product rather than the product.
 
-Section 1 of that REF makes the selection a pair, so the recovery rung is chosen
-here too and not deferred. There is no email and no operator, which closes the
-conforming recovery set to one member: a saved recovery code. That is the whole
-recovery story, and its cost is stated rather than patched later - losing the
-code with no live session ends the account's reachability.
+A guest is an account from the first frame; naming it with a password (create
+account) upgrades that same row in place, so a player keeps the scores they set
+before they did. Sign-in trades a name and password for a session; change
+password swaps the digest without dropping live sessions. There is no email and
+no operator, which keeps the credential set to one member.
 
 `resolve_session` is the single session-resolution choke point. Every private
 read and write goes through it; the public leaderboard read goes through a
@@ -32,21 +32,21 @@ from shoot4fun_backend.domain.exceptions.display_name_taken_error import (
 )
 from shoot4fun_backend.domain.model.account import Account
 from shoot4fun_backend.domain.model.arsenal import ArsenalEnvelope
-from shoot4fun_backend.domain.model.player_profile import DEFAULT_PROFILE, PlayerProfile
-from shoot4fun_backend.domain.model.recovery_code import (
+from shoot4fun_backend.domain.model.credentials import (
     hash_secret,
-    mint_recovery_code,
     mint_session_token,
     verify_secret,
 )
+from shoot4fun_backend.domain.model.player_profile import DEFAULT_PROFILE, PlayerProfile
 from shoot4fun_backend.logging import get_logger
 
-__all__ = ["AccountService", "MintedAccount", "NewSession"]
+__all__ = ["AccountService", "NewSession"]
 
 _log = get_logger("account_service")
 
 DISPLAY_NAME_MIN = 2
 DISPLAY_NAME_MAX = 24
+PASSWORD_MIN_LENGTH = 8
 
 # Sessions expire. The stakes axis caps session and inactivity lifetimes
 # (REF-Identity section 2), and the sweep below depends on it: a session that
@@ -73,13 +73,6 @@ _NOUNS = (
 class NewSession:
     account: Account
     token: str
-
-
-@dataclass(frozen=True, slots=True)
-class MintedAccount:
-    account: Account
-    token: str
-    recovery_code: str
 
 
 def normalize_display_name(raw: str) -> str:
@@ -181,14 +174,22 @@ class AccountService:
 
     # ---- registration and recovery ----------------------------------------
 
-    async def register(self, user_id: str, display_name: str) -> MintedAccount:
-        """Upgrade this account in place and mint its recovery code.
+    async def create_account(
+        self, user_id: str, display_name: str, password: str
+    ) -> Account:
+        """Upgrade this guest account in place into a named, password-protected
+        one, returning it signed in under the session that already exists.
 
-        The code is returned exactly once, here. Registering an account that
-        already holds one renames it and leaves the code alone: minting on a
-        rename would let a session alone retire the owner's written-down code
-        without ever presenting it, which is what rotation demands proof for.
+        A guest is an account from the first frame, so naming it keeps the
+        scores and profile already set under this session. Creating an account
+        that already holds a name only renames it and leaves the password alone:
+        a session alone must not be able to retire the owner's credential, which
+        is why rotation demands proof of the current one.
         """
+        if len(password or "") < PASSWORD_MIN_LENGTH:
+            raise ValueError(
+                f"password must be at least {PASSWORD_MIN_LENGTH} characters"
+            )
         cleaned = normalize_display_name(display_name)
         owner = await self._accounts.find_by_display_name(cleaned)
         if owner is not None and owner.user_id != user_id:
@@ -196,16 +197,16 @@ class AccountService:
 
         existing = await self._accounts.get(user_id)
         if existing is not None and existing.registered:
-            renamed = await self._accounts.rename(user_id, cleaned)
-            return MintedAccount(account=renamed, token="", recovery_code="")
+            return await self._accounts.rename(user_id, cleaned)
 
-        code = mint_recovery_code()
-        account = await self._accounts.register(user_id, cleaned, hash_secret(code))
-        _log.info("account registered", extra={"user_id": user_id})
-        return MintedAccount(account=account, token="", recovery_code=code)
+        account = await self._accounts.register(
+            user_id, cleaned, hash_secret(password)
+        )
+        _log.info("account created", extra={"user_id": user_id})
+        return account
 
-    async def sign_in(self, display_name: str, recovery_code: str) -> NewSession:
-        """Trade a display name and a recovery code for a session.
+    async def sign_in(self, display_name: str, password: str) -> NewSession:
+        """Trade a display name and a password for a session.
 
         An unknown name is refused without a verification. Equalising that
         timing would defend against enumeration, and the leaderboard publishes
@@ -218,26 +219,26 @@ class AccountService:
         account = await self._accounts.find_by_display_name(cleaned)
         if account is None or not account.registered:
             raise AuthenticationFailedError
-        stored = await self._accounts.recovery_hash_for(account.user_id)
-        if stored is None or not verify_secret(recovery_code.strip(), stored):
+        stored = await self._accounts.password_hash_for(account.user_id)
+        if stored is None or not verify_secret(password or "", stored):
             raise AuthenticationFailedError
         token = await self._issue_session(account.user_id)
         return NewSession(account=account, token=token)
 
-    async def rotate_recovery_code(self, user_id: str, current_code: str) -> MintedAccount:
-        """Mint a replacement, on proof of the current one, and kill every
-        existing session. Requiring the current code is what stops a stolen
+    async def change_password(
+        self, user_id: str, current_password: str, new_password: str
+    ) -> None:
+        """Swap the password digest on proof of the current one, keeping every
+        live session. Requiring the current password is what stops a stolen
         session locking the owner out of their own account."""
-        stored = await self._accounts.recovery_hash_for(user_id)
-        if stored is None or not verify_secret(current_code.strip(), stored):
+        if len(new_password or "") < PASSWORD_MIN_LENGTH:
+            raise ValueError(
+                f"password must be at least {PASSWORD_MIN_LENGTH} characters"
+            )
+        stored = await self._accounts.password_hash_for(user_id)
+        if stored is None or not verify_secret(current_password or "", stored):
             raise AuthenticationFailedError
-        code = mint_recovery_code()
-        await self._accounts.set_recovery_hash(user_id, hash_secret(code))
-        await self._accounts.delete_sessions_for_user(user_id)
-        account = await self._accounts.get(user_id)
-        assert account is not None, "rotating a code for an account that does not exist"
-        token = await self._issue_session(user_id)
-        return MintedAccount(account=account, token=token, recovery_code=code)
+        await self._accounts.set_password_hash(user_id, hash_secret(new_password))
 
     # ---- reads and profile -------------------------------------------------
 

@@ -69,16 +69,16 @@ def test_an_expired_guest_is_swept_and_a_registered_account_is_not() -> None:
 
         guest = await service.start_guest()
         named = await service.start_guest()
-        minted = await service.register(named.account.user_id, "KeptByName")
+        await service.create_account(named.account.user_id, "KeptByName", "keepname12")
         await asyncio.sleep(0.05)
 
         assert await service.sweep(0) == 1
 
         # The guest is gone; the registered account survives with no session at
-        # all, because its recovery code still reaches it.
+        # all, because its password still reaches it.
         assert await service.get(guest.account.user_id) is None
         assert await service.get(named.account.user_id) is not None
-        back = await service.sign_in("KeptByName", minted.recovery_code)
+        back = await service.sign_in("KeptByName", "keepname12")
         assert back.account.user_id == named.account.user_id
 
     asyncio.run(run())

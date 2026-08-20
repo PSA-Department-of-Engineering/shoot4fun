@@ -25,7 +25,7 @@ def _now() -> str:
 class InMemoryAccountRepository(AccountRepository):
     def __init__(self) -> None:
         self._accounts: dict[str, Account] = {}
-        self._recovery: dict[str, str] = {}
+        self._passwords: dict[str, str] = {}
         self._sessions: dict[str, str] = {}
         self._expiries: dict[str, float] = {}
         self._profiles: dict[str, PlayerProfile] = {}
@@ -63,7 +63,7 @@ class InMemoryAccountRepository(AccountRepository):
         return None
 
     async def register(
-        self, user_id: str, display_name: str, recovery_hash: str
+        self, user_id: str, display_name: str, password_hash: str
     ) -> Account:
         existing = self._accounts.get(user_id)
         account = Account(
@@ -75,7 +75,7 @@ class InMemoryAccountRepository(AccountRepository):
             external_subject=existing.external_subject if existing else None,
         )
         self._accounts[user_id] = account
-        self._recovery[user_id] = recovery_hash
+        self._passwords[user_id] = password_hash
         return account
 
     async def rename(self, user_id: str, display_name: str) -> Account:
@@ -91,11 +91,11 @@ class InMemoryAccountRepository(AccountRepository):
         self._accounts[user_id] = renamed
         return renamed
 
-    async def recovery_hash_for(self, user_id: str) -> str | None:
-        return self._recovery.get(user_id)
+    async def password_hash_for(self, user_id: str) -> str | None:
+        return self._passwords.get(user_id)
 
-    async def set_recovery_hash(self, user_id: str, recovery_hash: str) -> None:
-        self._recovery[user_id] = recovery_hash
+    async def set_password_hash(self, user_id: str, password_hash: str) -> None:
+        self._passwords[user_id] = password_hash
 
     async def create_session(
         self, token_hash: str, user_id: str, ttl_ms: int
@@ -132,7 +132,7 @@ class InMemoryAccountRepository(AccountRepository):
             if created > cutoff:
                 continue
             del self._accounts[user_id]
-            self._recovery.pop(user_id, None)
+            self._passwords.pop(user_id, None)
             deleted += 1
         return deleted
 

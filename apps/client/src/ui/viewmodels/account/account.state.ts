@@ -1,4 +1,4 @@
-/* The signed-in player, and the two dialogs that change who that is.
+/* The signed-in player, and the dialogs that change who that is.
  *
  * There is no "signed out" state to design for: a guest is an account, so the
  * store holds an account from the first frame and `registered` is the only
@@ -12,12 +12,9 @@ export interface AccountState {
     userId: string | null;
     displayName: string | null;
     registered: boolean;
-    /** Open dialog, if any. Registering and signing in are separate acts. */
-    dialog: null | "register" | "signIn" | "rotate";
-    /** The recovery code, held only for as long as it is on screen. It arrives
-     *  once and no read returns it again, so leaving this set after the player
-     *  dismisses it would be the only copy in a place nothing reads. */
-    revealedCode: string | null;
+    /** Open dialog, if any. Creating, signing in and changing a password are
+     *  separate acts. */
+    dialog: null | "create" | "signIn" | "changePassword";
     error: string | null;
     busy: boolean;
 }

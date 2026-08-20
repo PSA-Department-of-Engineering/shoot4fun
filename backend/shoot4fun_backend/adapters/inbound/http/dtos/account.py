@@ -1,8 +1,8 @@
 """Request and response DTOs for the account surface.
 
-No response type carries the recovery code or a session token except the two
-that mint one, and none ever carries a digest: the stored hash is no more
-returnable than the secret it stands for.
+No response type carries a password digest, and none ever carries a session
+token except the one that mints it: the stored hash is no more returnable than
+the secret it stands for.
 """
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ __all__ = [
     "AccountView",
     "ArsenalView",
     "ArsenalPutRequest",
+    "ChangePasswordRequest",
+    "CreateAccountRequest",
     "ProfileView",
-    "RegisterRequest",
-    "RotateRequest",
     "SessionView",
     "SignInRequest",
 ]
@@ -36,23 +36,19 @@ class SessionView(AccountView):
     token: str
 
 
-class MintedView(SessionView):
-    """An account, its session, and a recovery code shown exactly once."""
-
-    recovery_code: str
-
-
-class RegisterRequest(BaseModel):
+class CreateAccountRequest(BaseModel):
     display_name: str = Field(..., min_length=2, max_length=24)
+    password: str = Field(..., min_length=8, max_length=128)
 
 
 class SignInRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=64)
-    recovery_code: str = Field(..., min_length=1, max_length=128)
+    password: str = Field(..., min_length=1, max_length=128)
 
 
-class RotateRequest(BaseModel):
-    current_code: str = Field(..., min_length=1, max_length=128)
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 class ProfileView(BaseModel):
