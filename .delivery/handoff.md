@@ -72,7 +72,7 @@ When the done-definition requires the app live, executing §8 end to end is in-g
 | ADR-0006 | Optional player identity (guest + recovery code) — already landed; this line surfaces it, does not change it. |
 | ADR-0007 (NEW, build authors) | Arsenal data shape: a versioned envelope that preserves unknown fields (forward-compatible per ARS-004). Established before the Arsenal view is coded. |
 
-<layout sketch: this line adds no top-level entry. It (a) mounts `AccountPanel` into the menu/launch surface, (b) adds `apps/client/src/ui/views/pages/Arsenal.tsx` (or equivalent) rendering the `CharacterLibrary` rig + an inventory/loadout section bound to the ARS-004 shape, (c) flips the `arsenal` tile to `status: "ready"` in `menuConfig.ts`, (d) adds a backend Arsenal profile module + contract test for the forward-compatible envelope.>
+**Layout.** The build composes four surfaces, none adding a top-level entry: (a) mount `AccountPanel` into the menu/launch surface; (b) add `apps/client/src/ui/views/pages/Arsenal.tsx` (or equivalent) rendering the `CharacterLibrary` rig + an inventory/loadout section bound to the ARS-004 shape; (c) flip the `arsenal` tile to `status: "ready"` in `menuConfig.ts`; (d) add a backend Arsenal profile module + contract test for the forward-compatible envelope.
 
 ## 4. Data pipeline / integrations
 
@@ -134,7 +134,7 @@ Collect ALL of these:
 3. Promotion visible in git (the deploy-branch image tag bump).
 4. Orchestrator reports the app synced/healthy; pods running at the released version.
 5. Cache-busted probe of `https://shoot4fun.chaos-architect.dev` returns 200 within 5s (INT-012's deployment evidence, already established).
-6. App-specific smoke: the new e2e specs (`apps/client/e2e/account.spec.ts`, `apps/client/e2e/arsenal.spec.ts`) run in the same Playwright suite as `match.spec.ts` (root `e2e/`, against a locally-started server per the existing pattern), asserting login reachable-but-optional (INT-023/024), the arsenal tile opens the view (INT-026), and the inventory renders empty (INT-027/028). The public-URL liveness evidence is covered by INT-012's deployment probe (§9 item 5); the build does not need to relocate these specs under `foundry/**`.
+6. App-specific smoke: the new e2e specs (`apps/client/e2e/account.spec.ts`, `apps/client/e2e/arsenal.spec.ts`) run in the same Playwright suite as `match.spec.ts` (`apps/client/e2e/`, against a locally-started server per the existing pattern), asserting login reachable-but-optional (INT-023/024), the arsenal tile opens the view (INT-026), and the inventory renders empty (INT-027/028). The public-URL liveness evidence is covered by INT-012's deployment probe (§9 item 5); the build does not need to relocate these specs under `foundry/**`.
 7. `csd-intent` audit clean: INT-001…INT-029 active claims all name a marker; INT-023…INT-029 active after the build.
 
 ## 10. Degraded stop-states (stop, collect, report; never loop, never claim live)

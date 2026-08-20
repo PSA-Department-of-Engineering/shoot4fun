@@ -1,15 +1,15 @@
 ---
 phase: scope
 skill: deliver-engagement
-status: gate
+status: complete
 gate: proposal
-signed: pending
+signed: 2026-08-19
 reviewed: 2026-08-19
 run: s4f-lp-001
 attempt: 1
 mode: interactive
 started: 2026-08-19T16:55:59Z
-finished: 
+finished: 2026-08-19T17:03:24Z
 credential_ref: opencode-session
 delivers: P1
 ---
@@ -62,3 +62,5 @@ button next to Settings). This line delivers exactly **one estimation phase, P1*
 build+ship, learn) read this record, never the estimation project.
 
 > Fresh-eyes review passed 2026-08-19 (VERDICT: PASS; artifact `.delivery/reviews/proposal-2026-08-19.md`); recorded in `reviewed:`. The proposal gate awaits its signer (REF-Delivery.md section 1).
+
+> Gate closed: proposal signed 2026-08-19 by CarlosDSkills over a passing fresh-eyes review (REF-Delivery.md section 1). Prose above predates the closure.
