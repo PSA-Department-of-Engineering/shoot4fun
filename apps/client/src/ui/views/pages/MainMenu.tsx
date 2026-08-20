@@ -52,7 +52,6 @@ const MainMenu = () => {
             }
             footer={<AccountPanel />}
         >
-            <AccountPanel />
             {panel === "versus" ? (
                 <div className="panel">
                     <Button
