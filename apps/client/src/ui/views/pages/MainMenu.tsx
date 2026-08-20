@@ -6,11 +6,9 @@ import { AccountPanel } from "../organisms/AccountPanel";
 import { Button } from "../atoms/Button";
 import { cx } from "../cx";
 import { JoinPanel } from "../organisms/JoinPanel";
-import { AccountPanel } from "../organisms/AccountPanel";
 import { Wordmark } from "../atoms/Wordmark";
 import { MenuTemplate } from "../templates/MenuTemplate";
 import { MENU_TILES, type MenuTile } from "./menuConfig";
-import Arsenal from "./Arsenal";
 
 /* The growable front door (issue #42).
  *
@@ -40,11 +38,6 @@ const MainMenu = () => {
             // coop and shop are "soon": disabled above, never reach here.
         }
     };
-
-    // The Arsenal view is its own full screen (its own MenuTemplate, back
-    // button, and AccountPanel-free surface), so it replaces the menu rather
-    // than nesting inside it. Its back button returns to the menu (the tiles).
-    if (panel === "arsenal") return <Arsenal onBack={() => setPanel(null)} />;
 
     return (
         <MenuTemplate

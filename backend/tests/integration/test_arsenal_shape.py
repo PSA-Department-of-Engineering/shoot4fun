@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 import pytest_intent
 
 from shoot4fun_backend.adapters.outbound.memory.in_memory_account_repository import (

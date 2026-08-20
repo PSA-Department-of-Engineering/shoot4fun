@@ -13,7 +13,6 @@ from shoot4fun_backend.application.ports.outbound.account_repository import (
     AccountRepository,
 )
 from shoot4fun_backend.domain.model.account import Account
-from shoot4fun_backend.domain.model.arsenal import PlayerArsenal
 from shoot4fun_backend.domain.model.player_profile import PlayerProfile
 
 __all__ = ["InMemoryAccountRepository"]

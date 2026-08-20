@@ -13,7 +13,6 @@ from __future__ import annotations
 from typing import Protocol
 
 from shoot4fun_backend.domain.model.account import Account
-from shoot4fun_backend.domain.model.arsenal import PlayerArsenal
 from shoot4fun_backend.domain.model.player_profile import PlayerProfile
 
 __all__ = ["AccountRepository"]

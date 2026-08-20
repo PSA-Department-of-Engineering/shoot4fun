@@ -17,8 +17,6 @@ from fastapi import APIRouter, HTTPException, Request
 
 from shoot4fun_backend.adapters.inbound.http.dtos.account import (
     AccountView,
-    ArsenalPutRequest,
-    ArsenalView,
     MintedView,
     ProfileView,
     RegisterRequest,
@@ -37,7 +35,6 @@ from shoot4fun_backend.domain.exceptions.display_name_taken_error import (
     DisplayNameTakenError,
 )
 from shoot4fun_backend.domain.model.account import Account
-from shoot4fun_backend.domain.model.arsenal import PlayerArsenal
 from shoot4fun_backend.domain.model.player_profile import PlayerProfile
 
 if TYPE_CHECKING:
@@ -208,7 +205,7 @@ def build_router(container: Container) -> APIRouter:
         service: AccountService = container.account_service()
         return await service.get_arsenal(await _require_user(request)) or {
             "version": 1,
-            "data": {},
+            "data": {"model": "robot", "inventory": []},
         }
 
     @router.put("/account/arsenal")

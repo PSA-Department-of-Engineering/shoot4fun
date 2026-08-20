@@ -1,9 +1,9 @@
 """The Arsenal data shape is forward-compatible (ARS-004, INT-029).
 
-The inventory/loadout envelope must preserve unknown fields, so a future
-that adds weapon unlocks, outfits, or stats grows the shape without losing
-a player's existing data. The test posts an over-shaped payload (fields the
-current build does not name) and proves every one of them survives a round
+The inventory/loadout envelope must preserve unknown fields inside `data`, so
+a future that adds weapon unlocks, outfits, or stats grows the shape without
+losing a player's existing data. The test posts an over-shaped payload (fields
+the current build does not name) and proves every one of them survives a round
 trip through the stored envelope unchanged.
 """
 from __future__ import annotations
@@ -35,17 +35,19 @@ def test_arsenal_envelope_preserves_unknown_fields(client: TestClient) -> None:
     assert fresh.status_code == 200
     body = fresh.json()
     assert body["version"] == 1
-    assert body["loadout"] == {}
+    assert body["data"] == {"model": "robot", "inventory": []}
 
     # An over-shaped payload: fields the current build does not name
     # (weapon_unlocks, outfits, stats) alongside the known ones.
     over_shaped = {
         "version": 1,
-        "model": "robot",
-        "loadout": {"primary": "rifle", "secondary": "smg"},
-        "weapon_unlocks": ["shotgun", "sniper"],
-        "outfits": {"default": "crimson"},
-        "stats": {"kills": 12, "matches": 3},
+        "data": {
+            "model": "robot",
+            "inventory": [{"primary": "rifle", "secondary": "smg"}],
+            "weapon_unlocks": ["shotgun", "sniper"],
+            "outfits": {"default": "crimson"},
+            "stats": {"kills": 12, "matches": 3},
+        },
     }
     put = client.put(
         "/api/account/arsenal", headers={SESSION: token}, json=over_shaped
@@ -55,12 +57,14 @@ def test_arsenal_envelope_preserves_unknown_fields(client: TestClient) -> None:
     # The stored envelope round-trips every field, known and unknown.
     stored = client.get("/api/account/arsenal", headers={SESSION: token}).json()
     assert stored["version"] == 1
-    assert stored["model"] == "robot"
-    assert stored["loadout"] == {"primary": "rifle", "secondary": "smg"}
-    # The forward-shaped fields are preserved ver batim.
-    assert stored["weapon_unlocks"] == ["shotgun", "sniper"]
-    assert stored["outfits"] == {"default": "crimson"}
-    assert stored["stats"] == {"kills": 12, "matches": 3}
+    assert stored["data"]["model"] == "robot"
+    assert stored["data"]["inventory"] == [
+        {"primary": "rifle", "secondary": "smg"}
+    ]
+    # The forward-shaped fields are preserved verbatim.
+    assert stored["data"]["weapon_unlocks"] == ["shotgun", "sniper"]
+    assert stored["data"]["outfits"] == {"default": "crimson"}
+    assert stored["data"]["stats"] == {"kills": 12, "matches": 3}
 
 
 @pytest_intent.intent("INT-029")
@@ -74,19 +78,16 @@ def test_arsenal_envelope_survives_additional_unknown_fields(client: TestClient)
     client.put(
         "/api/account/arsenal",
         headers={SESSION: token},
-        json={"version": 1, "model": "robot", "loadout": {}, "future_flag": True},
+        json={"version": 1, "data": {"model": "robot", "future_flag": True}},
     )
     client.put(
         "/api/account/arsenal",
         headers={SESSION: token},
         json={
             "version": 1,
-            "model": "robot",
-            "loadout": {},
-            "future_flag": True,
-            "another_flag": 7,
+            "data": {"model": "robot", "future_flag": True, "another_flag": 7},
         },
     )
     stored = client.get("/api/account/arsenal", headers={SESSION: token}).json()
-    assert stored["future_flag"] is True
-    assert stored["another_flag"] == 7
+    assert stored["data"]["future_flag"] is True
+    assert stored["data"]["another_flag"] == 7

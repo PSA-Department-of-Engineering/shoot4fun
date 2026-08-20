@@ -23,7 +23,7 @@ class ArsenalEnvelope:
     data: dict[str, Any]
 
     @classmethod
-    def parse(cls, raw: object) -> "ArsenalEnvelope":
+    def parse(cls, raw: object) -> ArsenalEnvelope:
         """Read an envelope back, refusing anything that is not a versioned
         object with a data payload. The data object is kept verbatim, so keys
         a future shape added survive the round-trip."""
