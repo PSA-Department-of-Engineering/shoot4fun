@@ -376,9 +376,9 @@ INT-022:
 # visual this phase. This is a documented descope of that one word, not a silent
 # drop of PROF-001/002/003.
 
-# AccountPanel.tsx existed on main but was imported/rendered nowhere, so login
-# was unreachable. The build mounts the panel into the menu surface and the e2e
-# marker below attests it (issue #41).
+# AccountPanel.tsx shipped on main but was imported/rendered nowhere, so login was
+# not actually reachable. The build mounts the panel into the menu surface and adds
+# the e2e marker (apps/client/e2e/account.spec.ts), so this claim is now active.
 INT-023:
   version: 1.0.0
   status: active
@@ -415,9 +415,9 @@ INT-025:
     type: behavior
   criticality: high
 
-# menuConfig.ts shipped the arsenal tile as status:'soon' and MainMenu early-returned
-# on 'soon' with a disabled button, so it was a dead link. The build flips the
-# tile to 'ready' and wires it to the Arsenal view (issue #41).
+# menuConfig.ts shipped the arsenal tile as status:'soon' with a disabled button, a
+# dead link. The build flips it to 'ready' and wires the tile to the Arsenal view
+# (apps/client/e2e/arsenal.spec.ts), so this claim is now active.
 INT-026:
   version: 1.0.0
   status: active
