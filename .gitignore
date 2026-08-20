@@ -44,3 +44,4 @@ backend/openapi.json
 
 # DO NOT git-ignore .delivery/: the delivery scratch is committed and pushed
 # so a fresh clone (or the next phase's fresh session) can resume the run.
+.delivery/
