@@ -1,180 +1,82 @@
-/* The Arsenal view (ARS-001/002/003, issue #41).
-
-Two panels: the player model and the inventory/loadout. The model panel
-renders the rig `CharacterLibrary` already loads for the match, with a
-placeholder note that the full 3D character *viewer* is a later line (design.md
-out-of-scope). The loadout panel renders gracefully empty, bound to the
-forward-compatible Arsenal envelope (ARS-004 / ADR-0007), so the deferred
-shop and weapon-unlock work drop into a structure already present.
-
-The view reads the locked brand tokens via `theme.css` (docs/brand.md): the
-card, the one-pixel primary->accent top stripe, the muted-foreground empty
-copy. No new hue, font, or shape.
-*/
-import { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
-
-import { useArsenal } from "@/ui/viewmodels/arsenal/arsenal.store";
-import { useAccount } from "@/ui/viewmodels/account";
-import { SCENE_COLORS } from "@/brand/tokens";
+import { useSession } from "@/ui/viewmodels/session";
+import {
+    selectArsenalInventory,
+    selectArsenalModel,
+    useArsenal,
+} from "@/ui/viewmodels/arsenal/arsenal.state";
 
 import { Button } from "../atoms/Button";
+import { Wordmark } from "../atoms/Wordmark";
+import { RigView } from "../molecules/RigView";
 import { MenuTemplate } from "../templates/MenuTemplate";
-import { CharacterLibrary } from "@/scene/CharacterLibrary";
 
-const PLAYER_HEIGHT = 1.7;
-const TEAM_COLOR = new THREE.Color(SCENE_COLORS.team1);
-
-/* The rig, living in its own WebGL context. A standalone renderer/camera/loop
- * that is torn down on unmount; the shared match scene is unaffected. If the
- * asset or WebGL is unavailable the panel still shows its placeholder note,
- * so the view degrades to a labelled empty slot rather than a blank box. */
-function ArsenalCharacter({ model }: { model: string | null }) {
-    const host = useRef<HTMLDivElement>(null);
-    const [rendered, setRendered] = useState(false);
-
-    useEffect(() => {
-        const container = host.current;
-        if (!container) return;
-        let disposed = false;
-        let frame = 0;
-        let renderer: THREE.WebGLRenderer | null = null;
-        let instance: ReturnType<CharacterLibrary["create"]> | null = null;
-        let mixer: THREE.AnimationMixer | null = null;
-        const clock = new THREE.Clock();
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 50);
-        camera.position.set(0, PLAYER_HEIGHT * 0.9, 3.2);
-        camera.lookAt(0, PLAYER_HEIGHT * 0.85, 0);
-        scene.add(new THREE.AmbientLight(0xffffff, 1.4));
-        const key = new THREE.DirectionalLight(0xffffff, 1.2);
-        key.position.set(2, 4, 3);
-        scene.add(key);
-
-        const library = new CharacterLibrary(PLAYER_HEIGHT);
-        void library.ready().then((lib) => {
-            if (disposed || !lib) return;
-            let ok = false;
-            try {
-                instance = lib.create(TEAM_COLOR);
-                if (!instance) return;
-                scene.add(instance.root);
-                mixer = instance.mixer;
-                instance.action("idle").play();
-                renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-                const resize = () => {
-                    const size = container.clientWidth || 240;
-                    renderer!.setSize(size, size, false);
-                    camera.aspect = 1;
-                    camera.updateProjectionMatrix();
-                };
-                resize();
-                container.appendChild(renderer.domElement);
-                ok = true;
-                const loop = () => {
-                    if (disposed) return;
-                    frame = requestAnimationFrame(loop);
-                    const dt = clock.getDelta();
-                    mixer?.update(dt);
-                    renderer?.render(scene, camera);
-                };
-                loop();
-            } catch {
-                /* WebGL unavailable or the rig failed: the placeholder note
-                 * still shows, and the panel degrades to a labelled empty. */
-            } finally {
-                if (!disposed) setRendered(ok);
-            }
-        });
-
-        return () => {
-            disposed = true;
-            cancelAnimationFrame(frame);
-            mixer?.stopAllAction();
-            instance?.dispose();
-            if (renderer) {
-                renderer.dispose();
-                renderer.forceContextLoss();
-                renderer.domElement.remove();
-            }
-        };
-    }, [model]);
-
-    return (
-        <div className="arsenal__model" data-arsenal-model data-arsenal-model-rendered={rendered}>
-            <div className="arsenal__model-canvas" ref={host} aria-hidden="true" />
-            <p className="arsenal__model-note" data-arsenal-model-placeholder>
-                {model ? `Model: ${model}` : "3D character viewer coming soon"}
-            </p>
-        </div>
-    );
-}
-
-const Arsenal = ({ onBack }: { onBack: () => void }) => {
-    const registered = useAccount((s) => s.registered);
-    const pullFromAccount = useArsenal((s) => s.pullFromAccount);
-    const model = useArsenal((s) => s.model);
-    const loadout = useArsenal((s) => s.loadout);
-    const loaded = useArsenal((s) => s.loaded);
-
-    useEffect(() => {
-        if (registered) void pullFromAccount();
-    }, [registered, pullFromAccount]);
-
-    const entries = Object.entries(loadout);
+/* The Arsenal view (issue #41).
+ *
+ * Two panels. The player-model panel renders the CharacterLibrary rig the
+ * match avatars use and names it; the full 3D viewer is deferred, so this
+ * panel stays its placeholder until then. The inventory/loadout panel renders
+ * gracefully empty, bound to the forward-compatible Arsenal data shape
+ * (ARS-004) so the deferred shop and unlock flow drops into a structure
+ * already present.
+ */
+const Arsenal = () => {
+    const exitArsenal = useSession((s) => s.exitArsenal);
+    const model = useArsenal(selectArsenalModel);
+    const inventory = useArsenal(selectArsenalInventory);
 
     return (
         <MenuTemplate
             width="wide"
             header={
                 <>
-                    <h1 className="menu__title">Arsenal</h1>
-                    <p className="menu__lead">
-                        Your loadout and weapon unlocks (#41).
-                    </p>
+                    <Wordmark>SHOOT4FUN</Wordmark>
+                    <p className="menu__lead">Your loadout and inventory.</p>
                 </>
             }
-            footer={
-                <Button variant="ghost" onClick={onBack} data-menu-back>
+        >
+            <div className="arsenal" data-arsenal-view>
+                <Button
+                    variant="ghost"
+                    onClick={exitArsenal}
+                    data-arsenal-back
+                >
                     &larr; Back to menu
                 </Button>
-            }
-        >
-            <div className="arsenal">
-                <section className="arsenal__panel" aria-label="Player model">
-                    <h2 className="arsenal__panel-title">Character</h2>
-                    <ArsenalCharacter model={model} />
+
+                <section
+                    className="arsenal__panel arsenal__model"
+                    data-arsenal-model
+                >
+                    <h2 className="arsenal__title">Operator</h2>
+                    <RigView />
+                    <p className="arsenal__model-name" data-arsenal-model-name>
+                        {model}
+                    </p>
+                    <p className="arsenal__hint">
+                        Your current rig, standing idle. The full 3D character
+                        viewer lands in a later drop.
+                    </p>
                 </section>
 
                 <section
-                    className="arsenal__panel"
-                    aria-label="Inventory and loadout"
+                    className="arsenal__panel arsenal__inventory"
                     data-arsenal-inventory
                 >
-                    <h2 className="arsenal__panel-title">Loadout</h2>
-                    {entries.length === 0 ? (
+                    <h2 className="arsenal__title">Inventory &amp; loadout</h2>
+                    {inventory.length === 0 ? (
                         <div className="arsenal__empty" data-arsenal-empty>
                             <p className="arsenal__empty-copy">
-                                Your loadout is empty.
+                                Nothing in your loadout yet.
                             </p>
                             <Button variant="secondary" disabled data-arsenal-shop>
                                 Browse shop
                             </Button>
-                            <p className="arsenal__empty-note">
-                                {loaded
-                                    ? "Nothing equipped yet."
-                                    : "Sign in to load your saved loadout."}
-                            </p>
                         </div>
                     ) : (
-                        <ul className="arsenal__loadout">
-                            {entries.map(([slot, item]) => (
-                                <li className="arsenal__item" key={slot} data-arsenal-item>
-                                    <span className="arsenal__item-slot">{slot}</span>
-                                    <span className="arsenal__item-name">
-                                        {typeof item === "string" ? item : JSON.stringify(item)}
-                                    </span>
+                        <ul className="arsenal__list" data-arsenal-list>
+                            {inventory.map((item, index) => (
+                                <li key={index} className="arsenal__item">
+                                    {typeof item === "string" ? item : String(item)}
                                 </li>
                             ))}
                         </ul>

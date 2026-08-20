@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { useSession } from "@/ui/viewmodels/session";
 
+import { AccountPanel } from "../organisms/AccountPanel";
 import { Button } from "../atoms/Button";
 import { cx } from "../cx";
 import { JoinPanel } from "../organisms/JoinPanel";
@@ -18,14 +19,11 @@ import Arsenal from "./Arsenal";
  * rewritten when a tile is added. Tiles that are not built yet render
  * as disabled placeholders, so the menu shows the game's shape without
  * dead links. Versus opens the existing room/lobby flow; Training opens
- * the existing solo range; Arsenal (issue #41) opens the Arsenal view.
- *
- * The `AccountPanel` is mounted here so opt-in login is reachable from the
- * menu without ever gating play (LOGIN-001/002): a guest simply has no
- * account actions to take and play proceeds. */
+ * the existing solo range; Arsenal (issue #41) opens the Arsenal view. */
 const MainMenu = () => {
     const enterSolo = useSession((s) => s.enterSolo);
-    const [panel, setPanel] = useState<"versus" | "arsenal" | null>(null);
+    const enterArsenal = useSession((s) => s.enterArsenal);
+    const [panel, setPanel] = useState<"versus" | null>(null);
 
     const select = (tile: MenuTile): void => {
         if (tile.status === "soon") return;
@@ -37,7 +35,7 @@ const MainMenu = () => {
                 enterSolo();
                 break;
             case "arsenal":
-                setPanel("arsenal");
+                enterArsenal();
                 break;
             // coop and shop are "soon": disabled above, never reach here.
         }
@@ -61,6 +59,7 @@ const MainMenu = () => {
             }
             footer={<AccountPanel />}
         >
+            <AccountPanel />
             {panel === "versus" ? (
                 <div className="panel">
                     <Button

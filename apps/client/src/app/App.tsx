@@ -12,6 +12,7 @@ import MainMenu from "@/ui/views/pages/MainMenu";
 import MatchPage from "@/ui/views/pages/MatchPage";
 import ResultsPage from "@/ui/views/pages/ResultsPage";
 import SoloPage from "@/ui/views/pages/SoloPage";
+import Arsenal from "@/ui/views/pages/Arsenal";
 
 import { HudLayer } from "./HudLayer";
 import { SceneStage } from "./SceneStage";
@@ -44,6 +45,8 @@ const App = () => {
                 // No room yet: the launch screen, then the main menu.
                 menuScreen === "launch" ? (
                     <LaunchScreen />
+                ) : menuScreen === "arsenal" ? (
+                    <Arsenal />
                 ) : (
                     <MainMenu />
                 )
