@@ -65,10 +65,10 @@ test.describe("account", () => {
         "opt_in_login_is_surfaced_in_the_menu_but_never_required",
         async ({ browser }) => {
             const page = await toMenu(browser);
-            // The panel is mounted in the menu surface, so register/sign-in are
-            // reachable.
+            // The panel is mounted in the menu surface, so create-account and
+            // sign-in are reachable.
             await expect(page.locator('[data-account-panel]')).toBeVisible();
-            await page.getByRole('button', { name: 'Keep this name' }).click();
+            await page.getByRole('button', { name: 'Create account' }).click();
             await expect(page.locator('#account-name')).toBeVisible();
 
             // Closing the dialog leaves the match path intact: a guest can still
@@ -95,13 +95,13 @@ test.describe("account", () => {
         async ({ browser }) => {
             const page = await toMenu(browser);
             const name = `Recon${Date.now().toString(36)}`;
+            const password = "reconpass12";
 
-            // Register, capturing the one-time recovery code.
-            await page.getByRole('button', { name: 'Keep this name' }).click();
+            // Create an account with a name and a password.
+            await page.getByRole('button', { name: 'Create account' }).click();
             await page.locator('#account-name').fill(name);
-            await page.getByRole('button', { name: 'Save' }).click();
-            const code = await page.locator('[data-recovery-code]').innerText();
-            await page.getByRole('button', { name: 'I saved it' }).click();
+            await page.locator('#account-password').fill(password);
+            await page.getByRole('button', { name: 'Create' }).click();
 
             // Change a preference; the PUT that carries it actually lands.
             const pushed = page.waitForResponse(
@@ -119,9 +119,9 @@ test.describe("account", () => {
                 .poll(() => page.evaluate(() => localStorage.getItem('sf_sensitivity')))
                 .toBe('0.004');
 
-            // Sign out, then back in with the code. While signed out the player is
-            // a guest, whose dials are local-only, so a divergent value stays put
-            // until the pull lands.
+            // Sign out, then back in with the password. While signed out the
+            // player is a guest, whose dials are local-only, so a divergent value
+            // stays put until the pull lands.
             await page.getByRole('button', { name: 'Sign out' }).click();
             await expect(
                 page.getByRole('button', { name: 'Sign in' }),
@@ -131,7 +131,7 @@ test.describe("account", () => {
             );
             await page.getByRole('button', { name: 'Sign in' }).first().click();
             await page.locator('#signin-name').fill(name);
-            await page.locator('#signin-code').fill(code);
+            await page.locator('#signin-password').fill(password);
             await page.getByRole('button', { name: 'Sign in' }).last().click();
 
             // The stored preference now reflects the server profile pulled on

@@ -5,9 +5,9 @@ account and a session. Everything else here presents the session in
 `X-S4F-Session` (or a bearer `Authorization`), and resolves it through the one
 choke point in `AccountService`. No handler reads an identity from anywhere else.
 
-`POST /api/account/sign-in` and `POST /api/account/rotate` accept a secret, so
-both carry the guess budget. The budget is keyed on the account under attack and
-cleared by a correct credential.
+`POST /api/account/sign-in` and `POST /api/account/change-password` accept a
+secret, so both carry the guess budget. The budget is keyed on the account under
+attack and cleared by a correct credential.
 """
 from __future__ import annotations
 
@@ -17,10 +17,9 @@ from fastapi import APIRouter, HTTPException, Request
 
 from shoot4fun_backend.adapters.inbound.http.dtos.account import (
     AccountView,
-    MintedView,
+    ChangePasswordRequest,
+    CreateAccountRequest,
     ProfileView,
-    RegisterRequest,
-    RotateRequest,
     SessionView,
     SignInRequest,
 )
@@ -109,26 +108,25 @@ def build_router(container: Container) -> APIRouter:
             raise HTTPException(status_code=401, detail="not signed in")
         return _view(account)
 
-    @router.post("/account/register")
-    async def register(request: Request, body: RegisterRequest) -> MintedView:
-        """Name this account and hand over its recovery code, once.
+    @router.post("/account/create")
+    async def create(request: Request, body: CreateAccountRequest) -> AccountView:
+        """Name this guest account and protect it with a password, in place.
 
-        Registering an account that already holds a code renames it and returns
-        no code: the reply carries an empty string rather than a fresh secret.
+        The caller is already signed in as a guest, so no new session is minted:
+        the same token now resolves to the named account. A guest that already
+        holds a name is only renamed; the password is left untouched.
         """
         service: AccountService = container.account_service()
         user_id = await _require_user(request)
         try:
-            minted = await service.register(user_id, body.display_name)
+            account = await service.create_account(
+                user_id, body.display_name, body.password
+            )
         except DisplayNameTakenError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return MintedView(
-            **_view(minted.account).model_dump(),
-            token=session_token_of(request) or "",
-            recovery_code=minted.recovery_code,
-        )
+        return _view(account)
 
     @router.post("/account/sign-in")
     async def sign_in(body: SignInRequest) -> SessionView:
@@ -138,33 +136,33 @@ def build_router(container: Container) -> APIRouter:
         if not budget.check(key):
             raise HTTPException(status_code=429, detail=_TOO_MANY)
         try:
-            session = await service.sign_in(body.display_name, body.recovery_code)
+            session = await service.sign_in(body.display_name, body.password)
         except AuthenticationFailedError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
         budget.clear(key)
         return SessionView(**_view(session.account).model_dump(), token=session.token)
 
-    @router.post("/account/rotate")
-    async def rotate(request: Request, body: RotateRequest) -> MintedView:
-        """Mint a replacement recovery code on proof of the current one. Every
-        existing session dies, so the caller gets a fresh one to stay signed in
-        on this device."""
+    @router.post("/account/change-password", status_code=204)
+    async def change_password(
+        request: Request, body: ChangePasswordRequest
+    ) -> None:
+        """Swap the password on proof of the current one. Live sessions are kept,
+        so the device that proved the change stays signed in."""
         service: AccountService = container.account_service()
         user_id = await _require_user(request)
         budget = container.guess_budget()
-        key = f"rotate:{user_id}"
+        key = f"changepw:{user_id}"
         if not budget.check(key):
             raise HTTPException(status_code=429, detail=_TOO_MANY)
         try:
-            minted = await service.rotate_recovery_code(user_id, body.current_code)
+            await service.change_password(
+                user_id, body.current_password, body.new_password
+            )
         except AuthenticationFailedError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         budget.clear(key)
-        return MintedView(
-            **_view(minted.account).model_dump(),
-            token=minted.token,
-            recovery_code=minted.recovery_code,
-        )
 
     @router.post("/account/sign-out", status_code=204)
     async def sign_out(request: Request) -> None:

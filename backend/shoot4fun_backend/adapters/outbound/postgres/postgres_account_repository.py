@@ -31,12 +31,16 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     user_id           TEXT PRIMARY KEY,
     display_name      TEXT NOT NULL,
-    recovery_hash     TEXT,
+    password_hash     TEXT,
     registered        BOOLEAN NOT NULL DEFAULT FALSE,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     external_issuer   TEXT,
     external_subject  TEXT
 );
+-- Migration for deployments that already carried the recovery-code column:
+-- drop it and add the password column in its place.
+ALTER TABLE accounts DROP COLUMN IF EXISTS recovery_hash;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS password_hash TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS accounts_display_name_lower_idx
     ON accounts (lower(display_name));
 CREATE UNIQUE INDEX IF NOT EXISTS accounts_external_identity_idx
@@ -150,15 +154,15 @@ class PostgresAccountRepository(AccountRepository):
         return _to_account(row) if row else None
 
     async def register(
-        self, user_id: str, display_name: str, recovery_hash: str
+        self, user_id: str, display_name: str, password_hash: str
     ) -> Account:
         async with self._ready.acquire() as conn:
             row = await conn.fetchrow(
-                f"UPDATE accounts SET display_name = $2, recovery_hash = $3, "
+                f"UPDATE accounts SET display_name = $2, password_hash = $3, "
                 f"registered = TRUE WHERE user_id = $1 RETURNING {_ACCOUNT_COLUMNS}",
                 user_id,
                 display_name,
-                recovery_hash,
+                password_hash,
             )
         return _to_account(row)
 
@@ -172,18 +176,18 @@ class PostgresAccountRepository(AccountRepository):
             )
         return _to_account(row)
 
-    async def recovery_hash_for(self, user_id: str) -> str | None:
+    async def password_hash_for(self, user_id: str) -> str | None:
         async with self._ready.acquire() as conn:
             return await conn.fetchval(
-                "SELECT recovery_hash FROM accounts WHERE user_id = $1", user_id
+                "SELECT password_hash FROM accounts WHERE user_id = $1", user_id
             )
 
-    async def set_recovery_hash(self, user_id: str, recovery_hash: str) -> None:
+    async def set_password_hash(self, user_id: str, password_hash: str) -> None:
         async with self._ready.acquire() as conn:
             await conn.execute(
-                "UPDATE accounts SET recovery_hash = $2 WHERE user_id = $1",
+                "UPDATE accounts SET password_hash = $2 WHERE user_id = $1",
                 user_id,
-                recovery_hash,
+                password_hash,
             )
 
     async def create_session(

@@ -2,7 +2,7 @@
  *
  * The token is the only thing that authenticates a request, so it lives here
  * and nothing else reads it off storage. The server never returns it again
- * after minting it, and never returns the recovery code again at all.
+ * after minting it, and never returns the password digest.
  */
 
 const SESSION_KEY = "sf_session";
@@ -16,12 +16,6 @@ export interface AccountView {
 
 export interface SessionView extends AccountView {
     token: string;
-}
-
-export interface MintedView extends SessionView {
-    /** Shown exactly once, by the call that minted it. Empty when a call that
-     *  can mint chose not to (registering an account that already has one). */
-    recovery_code: string;
 }
 
 export interface ProfileView {
@@ -97,34 +91,42 @@ export function fetchMe(): Promise<AccountView> {
     return request<AccountView>("/api/account/me");
 }
 
-export function register(displayName: string): Promise<MintedView> {
-    return request<MintedView>("/api/account/register", {
+/** Name the current guest account and protect it with a password, in place.
+ *  The guest session stays valid, so no token is returned or replaced. */
+export function createAccount(
+    displayName: string,
+    password: string,
+): Promise<AccountView> {
+    return request<AccountView>("/api/account/create", {
         method: "POST",
-        body: JSON.stringify({ display_name: displayName }),
+        body: JSON.stringify({ display_name: displayName, password }),
     });
 }
 
 export async function signIn(
     displayName: string,
-    recoveryCode: string,
+    password: string,
 ): Promise<SessionView> {
     const session = await request<SessionView>("/api/account/sign-in", {
         method: "POST",
-        body: JSON.stringify({ display_name: displayName, recovery_code: recoveryCode }),
+        body: JSON.stringify({ display_name: displayName, password }),
     });
     rememberToken(session.token);
     return session;
 }
 
-export async function rotate(currentCode: string): Promise<MintedView> {
-    const minted = await request<MintedView>("/api/account/rotate", {
+/** Swap the password, proving the current one. Live sessions are kept. */
+export function changePassword(
+    currentPassword: string,
+    newPassword: string,
+): Promise<void> {
+    return request<void>("/api/account/change-password", {
         method: "POST",
-        body: JSON.stringify({ current_code: currentCode }),
+        body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+        }),
     });
-    // Rotating kills every session including this one, so adopt the fresh token
-    // or the next request is unauthenticated.
-    rememberToken(minted.token);
-    return minted;
 }
 
 /** Revoke the session server-side, then drop it locally. Dropping it locally

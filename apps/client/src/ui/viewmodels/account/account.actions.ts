@@ -1,4 +1,4 @@
-/* Account actions: entry, registration, sign-in, rotation, sign-out.
+/* Account actions: entry, account creation, sign-in, password change, sign-out.
  *
  * `hydrate` is the entry path and it never blocks play. It adopts the stored
  * session if there is one and mints a guest if there is not; if the server is
@@ -10,10 +10,10 @@ import { create } from "zustand";
 
 import {
     AccountRequestError,
+    changePassword as changePasswordRequest,
+    createAccount as createAccountRequest,
     fetchMe,
     forgetToken,
-    register as registerRequest,
-    rotate as rotateRequest,
     signIn as signInRequest,
     signOut as signOutRequest,
     startGuest,
@@ -24,12 +24,11 @@ import type { AccountPhase, AccountState } from "./account.state";
 
 interface AccountActions {
     hydrate: () => Promise<void>;
-    openDialog: (dialog: "register" | "signIn" | "rotate") => void;
+    openDialog: (dialog: "create" | "signIn" | "changePassword") => void;
     closeDialog: () => void;
-    dismissCode: () => void;
-    register: (displayName: string) => Promise<void>;
-    signIn: (displayName: string, recoveryCode: string) => Promise<void>;
-    rotate: (currentCode: string) => Promise<void>;
+    createAccount: (displayName: string, password: string) => Promise<void>;
+    signIn: (displayName: string, password: string) => Promise<void>;
+    changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
     signOut: () => Promise<void>;
 }
 
@@ -51,7 +50,6 @@ export const useAccount = create<AccountState & AccountActions>()((set, get) => 
     displayName: null,
     registered: false,
     dialog: null,
-    revealedCode: null,
     error: null,
     busy: false,
 
@@ -92,23 +90,22 @@ export const useAccount = create<AccountState & AccountActions>()((set, get) => 
 
     openDialog: (dialog) => set({ dialog, error: null }),
     closeDialog: () => set({ dialog: null, error: null }),
-    dismissCode: () => set({ revealedCode: null }),
 
-    register: async (displayName) => {
+    createAccount: async (displayName, password) => {
         set({ busy: true, error: null });
         try {
-            const minted = await registerRequest(displayName.trim());
+            const account = await createAccountRequest(
+                displayName.trim(),
+                password,
+            );
             set({
-                userId: minted.user_id,
-                displayName: minted.display_name,
-                registered: minted.registered,
+                userId: account.user_id,
+                displayName: account.display_name,
+                registered: account.registered,
                 dialog: null,
-                // Empty when this was a rename rather than an upgrade, and an
-                // empty reveal is no reveal.
-                revealedCode: minted.recovery_code || null,
             });
-            // Registering keeps the dials the player already set, so they go up
-            // rather than being replaced by an empty account's defaults.
+            // Creating an account keeps the dials the player already set, so they
+            // go up rather than being replaced by an empty account's defaults.
             void (await settingsStore()).pushToAccount();
         } catch (error) {
             set({ error: messageOf(error) });
@@ -117,10 +114,10 @@ export const useAccount = create<AccountState & AccountActions>()((set, get) => 
         }
     },
 
-    signIn: async (displayName, recoveryCode) => {
+    signIn: async (displayName, password) => {
         set({ busy: true, error: null });
         try {
-            const session = await signInRequest(displayName.trim(), recoveryCode.trim());
+            const session = await signInRequest(displayName.trim(), password);
             set({
                 userId: session.user_id,
                 displayName: session.display_name,
@@ -137,11 +134,11 @@ export const useAccount = create<AccountState & AccountActions>()((set, get) => 
         }
     },
 
-    rotate: async (currentCode) => {
+    changePassword: async (currentPassword, newPassword) => {
         set({ busy: true, error: null });
         try {
-            const minted = await rotateRequest(currentCode.trim());
-            set({ dialog: null, revealedCode: minted.recovery_code });
+            await changePasswordRequest(currentPassword, newPassword);
+            set({ dialog: null });
         } catch (error) {
             set({ error: messageOf(error) });
         } finally {
