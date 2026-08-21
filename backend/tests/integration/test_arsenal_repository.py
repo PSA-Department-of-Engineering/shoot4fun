@@ -45,8 +45,13 @@ async def pg_repo() -> PostgresAccountRepository:
     finally:
         admin = await asyncpg.connect(dsn)
         try:
+            # The account the test created (create_guest) is not cascade-cleaned
+            # by the arsenal_profiles delete, so drop both to leave no residue.
             await admin.execute(
                 "DELETE FROM arsenal_profiles WHERE user_id LIKE 'arsenal_test_%'"
+            )
+            await admin.execute(
+                "DELETE FROM accounts WHERE user_id LIKE 'arsenal_test_%'"
             )
         finally:
             await admin.close()
