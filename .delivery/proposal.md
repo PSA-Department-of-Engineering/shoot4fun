@@ -5,7 +5,7 @@ status: gate
 gate: proposal
 delivers: P1
 signed: pending
-reviewed: 
+reviewed: 2026-08-21
 run: 
 attempt: 1
 mode: interactive
@@ -13,6 +13,8 @@ started: 2026-08-21T15:59:02Z
 finished: 
 credential_ref: 
 ---
+
+> Fresh-eyes review passed 2026-08-21 (VERDICT: PASS; artifact `.delivery/reviews/proposal-2026-08-21.md`); recorded in `reviewed:`. The proposal gate awaits its signer (REF-Delivery.md section 1). Prose below predates the review.
 
 # Proposal — Shoot4Fun Shop Surface
 
