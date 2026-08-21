@@ -667,11 +667,20 @@ test.describe("a match", () => {
             await host.keyboard.up("w");
             expect(distanceFrom(from, to)).toBeLessThan(MOVE_SPEED * elapsed * 1.5);
 
-            // And it stops when the key comes up.
+            // And it stops when the key comes up. Poll the distance from
+            // the release point across a settling window rather than
+            // sampling once after a fixed delay (issue #59): under CI
+            // load the client can keep predicting a stride or two after
+            // the key is released, so a single post-release sample catches
+            // the player mid-decay and reads as "still moving". Polling
+            // passes only once the player has actually come to rest, so a
+            // lone under-sampled delta no longer fails a passing contract.
             const atRelease = await positionOf(host);
-            await host.waitForTimeout(600);
-            const afterRelease = await positionOf(host);
-            expect(distanceFrom(atRelease, afterRelease)).toBeLessThan(0.35);
+            await expect
+                .poll(async () => distanceFrom(atRelease, await positionOf(host)), {
+                    timeout: 15_000,
+                })
+                .toBeLessThan(0.35);
 
             // Jump (issue #10). Holding Space bounces a grounded player off
             // the floor, so the feet rise above the ground; the arc is

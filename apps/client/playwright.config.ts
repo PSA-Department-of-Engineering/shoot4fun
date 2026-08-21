@@ -29,7 +29,12 @@ export default defineConfig({
     expect: { timeout: 10_000 },
     workers: 1,
     forbidOnly: !!process.env.CI,
-    retries: process.env.CI ? 1 : 0,
+    // Two retries in CI: the e2e project drives the real game against a
+    // live server, and INT-003's physics assertions sample a simulation
+    // that is timing-sensitive under CI load. A single intermittent
+    // timing miss is absorbed rather than re-running the whole suite
+    // (issue #59).
+    retries: process.env.CI ? 2 : 0,
     reporter: process.env.CI ? "github" : "line",
     use: {
         baseURL: BASE_URL,
