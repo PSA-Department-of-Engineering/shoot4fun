@@ -9,6 +9,7 @@
 import { create } from "zustand";
 
 import { getGameRuntime, type ConnectionStatus, type ServerError } from "@/app/GameRuntime";
+import { useAccount } from "@/ui/viewmodels/account";
 
 import {
     isNameValid,
@@ -45,9 +46,9 @@ interface SessionActions {
     /** Enter as a guest: both this and `chooseLogin` land on the same
      * main menu (issue #42). Login's own account/profile flow is #41. */
     chooseGuest: () => void;
-    /** Enter via login. Until #41 lands this reaches the identical menu a
-     * guest gets; the split exists so a logged-in player can later carry
-     * their profile and inventory into that same menu. */
+    /** Enter via login: open the sign-in dialog rather than dropping the
+     * player onto the menu untyped. Both guests and signed-in players land
+     * on the same main menu afterwards (issue #42). */
     chooseLogin: () => void;
     /** Open the Arsenal view from the main menu (issue #41). */
     enterArsenal: () => void;
@@ -179,7 +180,7 @@ export const useSession = create<SessionState & SessionActions>()((set, get) => 
 
     chooseGuest: () => set({ screen: "menu" }),
 
-    chooseLogin: () => set({ screen: "menu" }),
+    chooseLogin: () => useAccount.getState().openDialog("signIn"),
 
     enterArsenal: () => set({ screen: "arsenal" }),
 

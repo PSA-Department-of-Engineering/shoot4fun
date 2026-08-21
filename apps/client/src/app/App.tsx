@@ -6,6 +6,7 @@ import {
     useSession,
 } from "@/ui/viewmodels/session";
 import { SettingsDialog } from "@/ui/views/organisms/SettingsDialog";
+import { AccountDialog } from "@/ui/views/organisms/AccountDialog";
 import LaunchScreen from "@/ui/views/pages/LaunchScreen";
 import LobbyPage from "@/ui/views/pages/LobbyPage";
 import MainMenu from "@/ui/views/pages/MainMenu";
@@ -58,6 +59,7 @@ const App = () => {
                 <LobbyPage />
             )}
             <SettingsDialog />
+            <AccountDialog />
         </>
     );
 };

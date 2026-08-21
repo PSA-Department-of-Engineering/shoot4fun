@@ -20,6 +20,8 @@ import {
     storedToken,
 } from "@/net/accountApi";
 
+import { useSession } from "@/ui/viewmodels/session";
+
 import type { AccountPhase, AccountState } from "./account.state";
 
 interface AccountActions {
@@ -104,8 +106,10 @@ export const useAccount = create<AccountState & AccountActions>()((set, get) => 
                 registered: account.registered,
                 dialog: null,
             });
-            // Creating an account keeps the dials the player already set, so they
-            // go up rather than being replaced by an empty account's defaults.
+            // A successful create lands the player on the main menu (the launch
+            // screen opens this dialog directly), and keeps the dials they
+            // already set so they go up rather than an empty account's defaults.
+            useSession.setState({ screen: "menu" });
             void (await settingsStore()).pushToAccount();
         } catch (error) {
             set({ error: messageOf(error) });
@@ -124,6 +128,9 @@ export const useAccount = create<AccountState & AccountActions>()((set, get) => 
                 registered: session.registered,
                 dialog: null,
             });
+            // A successful sign-in lands the player on the main menu (the launch
+            // screen opens this dialog directly); on the menu this is a no-op.
+            useSession.setState({ screen: "menu" });
             // Signing in adopts an existing account, so its dials win: that is
             // the whole point of settings following you to another machine.
             void (await settingsStore()).pullFromAccount();
