@@ -667,11 +667,31 @@ test.describe("a match", () => {
             await host.keyboard.up("w");
             expect(distanceFrom(from, to)).toBeLessThan(MOVE_SPEED * elapsed * 1.5);
 
-            // And it stops when the key comes up.
+            // And it stops when the key comes up. Require the player to
+            // actually come to rest rather than sampling once at the
+            // release instant (issue #59): a single immediate sample reads
+            // 0 and passes vacuously, while a single fixed-delay sample
+            // catches the player mid-decay and fails a passing contract.
+            // Wait out the residual stride after key-up, then poll the
+            // inter-sample step until it drops below the rest threshold -
+            // which only happens once the simulation has stopped advancing
+            // the position - and finally check the rest point is within the
+            // contract bound of where the key came up.
             const atRelease = await positionOf(host);
-            await host.waitForTimeout(600);
-            const afterRelease = await positionOf(host);
-            expect(distanceFrom(atRelease, afterRelease)).toBeLessThan(0.35);
+            await host.waitForTimeout(400);
+            await expect
+                .poll(
+                    async () => {
+                        const a = await positionOf(host);
+                        await host.waitForTimeout(200);
+                        const b = await positionOf(host);
+                        return distanceFrom(a, b);
+                    },
+                    { timeout: 15_000 },
+                )
+                .toBeLessThan(0.1);
+            const afterRest = await positionOf(host);
+            expect(distanceFrom(atRelease, afterRest)).toBeLessThan(0.35);
 
             // Jump (issue #10). Holding Space bounces a grounded player off
             // the floor, so the feet rise above the ground; the arc is
