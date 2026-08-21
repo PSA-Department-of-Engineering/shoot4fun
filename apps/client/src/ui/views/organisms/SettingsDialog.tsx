@@ -15,6 +15,8 @@ import {
     useSettings,
 } from "@/ui/viewmodels/settings";
 
+import { version as GAME_VERSION } from "../../../../package.json";
+
 import { Button } from "../atoms/Button";
 import { SettingSlider } from "../molecules/SettingSlider";
 import { SettingToggle } from "../molecules/SettingToggle";
@@ -127,6 +129,13 @@ export const SettingsDialog = () => {
                         </div>
                     ))}
                 </dl>
+
+                <div className="setting" data-version-row>
+                    <div className="setting__header">
+                        <span className="setting__label">Version</span>
+                        <span className="setting__value">{GAME_VERSION}</span>
+                    </div>
+                </div>
 
                 <div className="modal__actions">
                     <Button variant="primary" onClick={close} autoFocus data-settings-close>
