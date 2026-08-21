@@ -5,14 +5,16 @@
  * that are not built yet ship as disabled placeholders, so the menu
  * shows the game's full shape without ever offering a dead link. */
 
-export type MenuTileId = "versus" | "training" | "coop" | "arsenal" | "shop";
+export type MenuTileId = "versus" | "practice" | "survival" | "arsenal" | "shop";
 export type MenuTileStatus = "ready" | "soon";
+export type MenuTileGroup = "mode" | "store";
 
 export interface MenuTile {
     id: MenuTileId;
     title: string;
     caption: string;
     status: MenuTileStatus;
+    group: MenuTileGroup;
 }
 
 export const MENU_TILES: MenuTile[] = [
@@ -21,29 +23,34 @@ export const MENU_TILES: MenuTile[] = [
         title: "Versus",
         caption: "Open a room or join one. Up to you and the lobby.",
         status: "ready",
+        group: "mode",
     },
     {
-        id: "training",
-        title: "Training",
-        caption: "Solo aim range. Warm up before you queue.",
+        id: "practice",
+        title: "Practice",
+        caption: "Solo aim range. Drill movement and accuracy at your own pace.",
         status: "ready",
+        group: "mode",
     },
     {
-        id: "coop",
-        title: "Coop",
-        caption: "Survive the wave with a friend. Not built yet.",
+        id: "survival",
+        title: "Survival",
+        caption: "Endless waves, alone or with a friend. Not built yet.",
         status: "soon",
+        group: "mode",
     },
     {
         id: "arsenal",
         title: "Arsenal",
-        caption: "Your loadout and weapon unlocks (#41).",
+        caption: "Your loadout, weapons and unlocks.",
         status: "ready",
+        group: "store",
     },
     {
         id: "shop",
         title: "Shop",
-        caption: "Skins, cases and cosmetics. Coming later.",
+        caption: "Skins, cases and cosmetics.",
         status: "soon",
+        group: "store",
     },
 ];
