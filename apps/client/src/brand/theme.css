@@ -280,12 +280,36 @@ body {
     gap: var(--space-3);
 }
 
-/* The growable front door (issue #42): a grid driven entirely by the
- * tile list, so adding a mode or store is a data change, not a rewrite.
- * Every tile reads a token; a literal colour here would be a defect. */
-.menu-tiles {
+/* The growable front door (issue #42): the tiles are driven entirely by
+ * the tile list, so adding a mode or store is a data change, not a
+ * rewrite. The list renders as two deliberate rows - the 3-up modes grid
+ * on top and the 2-up store grid below - instead of one auto-fill grid
+ * that would wrap into a stray 3×2. Every tile reads a token; a literal
+ * colour here would be a defect. */
+.menu-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.menu-group__title {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+}
+
+.menu-modes {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+}
+
+.menu-stores {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-4);
 }
 
@@ -1339,6 +1363,11 @@ body {
 
     .invite > .btn {
         margin-left: 0;
+    }
+
+    .menu-modes,
+    .menu-stores {
+        grid-template-columns: 1fr;
     }
 
     /* Under the width that can hold the locked size, the mark scales to

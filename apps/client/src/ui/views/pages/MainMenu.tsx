@@ -16,7 +16,7 @@ import { MENU_TILES, type MenuTile } from "./menuConfig";
  * `MENU_TILES`; the grid below is rendered from that list and is never
  * rewritten when a tile is added. Tiles that are not built yet render
  * as disabled placeholders, so the menu shows the game's shape without
- * dead links. Versus opens the existing room/lobby flow; Training opens
+ * dead links. Versus opens the existing room/lobby flow; Practice opens
  * the existing solo range; Arsenal (issue #41) opens the Arsenal view. */
 const MainMenu = () => {
     const enterSolo = useSession((s) => s.enterSolo);
@@ -29,15 +29,36 @@ const MainMenu = () => {
             case "versus":
                 setPanel("versus");
                 break;
-            case "training":
+            case "practice":
                 enterSolo();
                 break;
             case "arsenal":
                 enterArsenal();
                 break;
-            // coop and shop are "soon": disabled above, never reach here.
+            // survival and shop are "soon": disabled above, never reach here.
         }
     };
+
+    const renderTile = (tile: MenuTile) => (
+        <button
+            key={tile.id}
+            type="button"
+            className={cx(
+                "menu-tile",
+                tile.status === "soon" && "menu-tile--soon",
+            )}
+            disabled={tile.status === "soon"}
+            onClick={() => select(tile)}
+            data-tile={tile.id}
+            data-tile-status={tile.status}
+        >
+            <span className="menu-tile__title">{tile.title}</span>
+            <span className="menu-tile__caption">{tile.caption}</span>
+            {tile.status === "soon" ? (
+                <span className="menu-tile__badge">Coming soon</span>
+            ) : null}
+        </button>
+    );
 
     return (
         <MenuTemplate
@@ -65,28 +86,20 @@ const MainMenu = () => {
                     <JoinPanel />
                 </div>
             ) : (
-                <div className="menu-tiles">
-                    {MENU_TILES.map((tile) => (
-                        <button
-                            key={tile.id}
-                            type="button"
-                            className={cx(
-                                "menu-tile",
-                                tile.status === "soon" && "menu-tile--soon",
-                            )}
-                            disabled={tile.status === "soon"}
-                            onClick={() => select(tile)}
-                            data-tile={tile.id}
-                            data-tile-status={tile.status}
-                        >
-                            <span className="menu-tile__title">{tile.title}</span>
-                            <span className="menu-tile__caption">{tile.caption}</span>
-                            {tile.status === "soon" ? (
-                                <span className="menu-tile__badge">Coming soon</span>
-                            ) : null}
-                        </button>
-                    ))}
-                </div>
+                <>
+                    <section className="menu-group">
+                        <h2 className="menu-group__title">Modes</h2>
+                        <div className="menu-modes">
+                            {MENU_TILES.filter((t) => t.group === "mode").map(renderTile)}
+                        </div>
+                    </section>
+                    <section className="menu-group">
+                        <h2 className="menu-group__title">Store</h2>
+                        <div className="menu-stores">
+                            {MENU_TILES.filter((t) => t.group === "store").map(renderTile)}
+                        </div>
+                    </section>
+                </>
             )}
         </MenuTemplate>
     );
