@@ -7,7 +7,7 @@ shoot4fun:
       tag: 1.14.0
       repository: ghcr.io/psa-department-of-engineering/shoot4fun-client
     docs:
-      tag: 1.13.2
+      tag: 1.14.0
       repository: ghcr.io/psa-department-of-engineering/shoot4fun-docs
   database:
     enabled: true
