@@ -1,4 +1,5 @@
 import {
+    selectDialog,
     selectDisplayName,
     selectHasAccount,
     selectRegistered,
@@ -13,15 +14,18 @@ import { Button } from "../atoms/Button";
  * match: it reports the name and offers two optional acts beside it. Keeping
  * a name and a password across devices is the only thing creating an account
  * buys. The dialogs the buttons open live in `AccountDialog`, a modal that
- * floats over whichever screen is up. */
+ * floats over whichever screen is up; while one is open this panel steps back
+ * so the section's own buttons don't sit behind the modal. */
 export const AccountPanel = () => {
     const hasAccount = useAccount(selectHasAccount);
     const displayName = useAccount(selectDisplayName);
     const registered = useAccount(selectRegistered);
+    const dialog = useAccount(selectDialog);
     const openDialog = useAccount((s) => s.openDialog);
     const signOut = useAccount((s) => s.signOut);
 
     if (!hasAccount) return null;
+    if (dialog) return null;
 
     return (
         <section className="account" data-account-panel>
