@@ -46,6 +46,24 @@ it's applied directly to the material as a hex value.
 | Team 1 (player) | `12 95% 55%` | `#F94B1F` (same as brand) |
 | Team 2 (player) | `195 100% 50%` | `#00BFFF` (Cyan) |
 
+## Rarity legend (five tiers)
+
+The shop surface's only new colour semantics (locked in `.delivery/design.md`
+§1.3). Every tier is a **treatment composed from the locked tokens above** —
+the legend introduces no colour that is not already a brand token.
+
+| Tier | Treatment | Tokens |
+| --- | --- | --- |
+| Common | Outlined, muted | `--border` outline, transparent fill, `--muted-foreground` text |
+| Uncommon | Secondary fill | `--secondary` fill, `--secondary-foreground` text |
+| Rare | Primary fill | `--primary` fill, `--primary-foreground` text |
+| Epic | Accent fill, dark text | `--accent` fill, `--accent-foreground` text (dark-on-gold, AA) |
+| Legendary | Primary-to-accent gradient, dark text | `--primary` → `--accent` gradient fill, `--accent-foreground` text |
+
+Known accepted gap inherited from the locked identity: white-on-orange small
+badges (Rare tier, ~3.6:1) use the locked `--primary` / `--primary-foreground`
+pair — do not "fix" by inventing colours; surface at the acceptance demo.
+
 ## Typography
 
 The build self-hosts four Google Fonts. No `@import` from Google Fonts
