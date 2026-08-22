@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml /app/
 COPY shoot4fun_backend /app/shoot4fun_backend
+COPY catalog /app/catalog
 
 RUN pip install --upgrade pip && pip install /app
 

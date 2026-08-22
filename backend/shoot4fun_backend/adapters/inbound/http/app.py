@@ -20,6 +20,7 @@ from shoot4fun_backend.adapters.inbound.http.routers import (
     accounts,
     arenas,
     leaderboard,
+    shop,
     system,
 )
 from shoot4fun_backend.container import Container
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
         prefix="/api",
         tags=["accounts"],
     )
+    app.include_router(shop.build_router(container), prefix="/api", tags=["shop"])
 
     @app.websocket("/ws/match/{room_id}")
     async def match_socket(websocket: WebSocket, room_id: str) -> None:

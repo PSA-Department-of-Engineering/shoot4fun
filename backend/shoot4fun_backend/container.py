@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 from contextlib import suppress
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import WebSocket
@@ -36,6 +37,10 @@ from shoot4fun_backend.application.ports.outbound.room_repository import RoomRep
 from shoot4fun_backend.application.services.account_service import AccountService
 from shoot4fun_backend.application.services.guess_budget import GuessBudget
 from shoot4fun_backend.application.services.match_service import MatchService
+from shoot4fun_backend.application.use_cases.acquire_item import AcquireItem
+from shoot4fun_backend.application.use_cases.browse_catalog import BrowseCatalog
+from shoot4fun_backend.application.use_cases.equip_cosmetic import EquipCosmetic
+from shoot4fun_backend.domain.model.shop import Catalog, load_catalog
 from shoot4fun_backend.logging import get_logger
 
 if TYPE_CHECKING:
@@ -48,6 +53,10 @@ _log = get_logger("container")
 
 
 _SWEEP_INTERVAL_SECONDS = 15 * 60
+
+# The authored cosmetics catalog (CAT-001, ADR-0008). Validated at startup:
+# a malformed entry refuses the process rather than serving a bad item.
+_CATALOG_PATH = Path(__file__).resolve().parent.parent / "catalog" / "cosmetics.json"
 
 class Container:
     """Wires the outbound adapters, the use cases, and the inbound adapters."""
@@ -64,6 +73,7 @@ class Container:
         )
         self._account_service: AccountService = AccountService(accounts=self._accounts)
         self._guess_budget: GuessBudget = GuessBudget()
+        self._catalog: Catalog = load_catalog(_CATALOG_PATH)
 
     def _build_leaderboard(self) -> LeaderboardRepository:
         dsn = os.environ.get("DATABASE_URL")
@@ -99,6 +109,18 @@ class Container:
 
     def guess_budget(self) -> GuessBudget:
         return self._guess_budget
+
+    def catalog(self) -> Catalog:
+        return self._catalog
+
+    def browse_catalog(self) -> BrowseCatalog:
+        return BrowseCatalog(self._catalog)
+
+    def acquire_item(self) -> AcquireItem:
+        return AcquireItem(accounts=self._accounts, catalog=self._catalog)
+
+    def equip_cosmetic(self) -> EquipCosmetic:
+        return EquipCosmetic(accounts=self._accounts, catalog=self._catalog)
 
     def room_repo(self) -> RoomRepository:
         return self._room_repo

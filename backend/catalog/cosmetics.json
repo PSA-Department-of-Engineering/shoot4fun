@@ -1,0 +1,98 @@
+{
+  "items": [
+    {
+      "id": "drab-canvas",
+      "name": "Drab Canvas",
+      "description": "Standard-issue workshop canvas. It has seen things.",
+      "rarity": "common",
+      "preview": { "kind": "solid", "token": "muted" },
+      "skin": { "region": "Main", "finish": "solid", "token": "muted" }
+    },
+    {
+      "id": "onyx",
+      "name": "Onyx",
+      "description": "Paint it black. The night shift's favourite.",
+      "rarity": "common",
+      "preview": { "kind": "solid", "token": "foreground" },
+      "skin": { "region": "Main", "finish": "solid", "token": "foreground" }
+    },
+    {
+      "id": "sandstone",
+      "name": "Sandstone",
+      "description": "Warm quarry stone, cut for a robot.",
+      "rarity": "uncommon",
+      "preview": { "kind": "solid", "token": "secondary" },
+      "skin": { "region": "Main", "finish": "solid", "token": "secondary" }
+    },
+    {
+      "id": "cobalt-frost",
+      "name": "Cobalt Frost",
+      "description": "Away-kit blue for the second squad.",
+      "rarity": "uncommon",
+      "preview": { "kind": "solid", "token": "team-2" },
+      "skin": { "region": "Main", "finish": "solid", "token": "team-2" }
+    },
+    {
+      "id": "hot-sauce",
+      "name": "Hot Sauce",
+      "description": "The brand colour, worn proudly. Handle with oven mitts.",
+      "rarity": "rare",
+      "preview": { "kind": "solid", "token": "primary" },
+      "skin": { "region": "Main", "finish": "solid", "token": "primary" }
+    },
+    {
+      "id": "mayday",
+      "name": "Mayday",
+      "description": "Alarm red. Everyone can see you coming.",
+      "rarity": "rare",
+      "preview": { "kind": "solid", "token": "destructive" },
+      "skin": { "region": "Main", "finish": "solid", "token": "destructive" }
+    },
+    {
+      "id": "graphite-edge",
+      "name": "Graphite Edge",
+      "description": "Border-grey panels with a machined look.",
+      "rarity": "rare",
+      "preview": { "kind": "solid", "token": "border" },
+      "skin": { "region": "Main", "finish": "solid", "token": "border" }
+    },
+    {
+      "id": "gold-rush",
+      "name": "Gold Rush",
+      "description": "Solid gold plating. Heavy, loud, unapologetic.",
+      "rarity": "epic",
+      "preview": { "kind": "solid", "token": "accent" },
+      "skin": { "region": "Main", "finish": "solid", "token": "accent" }
+    },
+    {
+      "id": "signal-flag",
+      "name": "Signal Flag",
+      "description": "High-visibility gold for players who mean it.",
+      "rarity": "epic",
+      "preview": { "kind": "solid", "token": "accent" },
+      "skin": {
+        "region": "Main",
+        "finish": "metallic",
+        "token": "accent",
+        "metalness": 0.85,
+        "roughness": 0.25
+      }
+    },
+    {
+      "id": "gilded-champion",
+      "name": "Gilded Champion",
+      "description": "The champion's finish: brand orange burning into gold.",
+      "rarity": "legendary",
+      "preview": {
+        "kind": "gradient",
+        "tokens": ["primary", "accent"],
+        "direction": "to-bottom-right"
+      },
+      "skin": {
+        "region": "Main",
+        "finish": "gradient",
+        "tokens": ["primary", "accent"]
+      }
+    }
+  ]
+}
