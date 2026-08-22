@@ -62,3 +62,65 @@ def test_only_an_owned_item_can_be_equipped(client: TestClient) -> None:
         json={"item_id": "gilded-champion"},
     )
     assert allowed.status_code == 200
+
+
+@pytest_intent.intent("INT-035")
+async def test_concurrent_shop_writes_do_not_lose_records() -> None:
+    """Overlapping shop writes for one account serialize on the SHARED
+    per-user locks the container owns.
+
+    The stub repository yields at get and save, forcing the interleaving a
+    real asyncpg pool produces; with unsynchronized writers, two acquires
+    of DIFFERENT items both answer success while the whole-envelope upsert
+    silently keeps only one record. The wiring under test mirrors
+    production: per-request use-case instances sharing one lock registry.
+    """
+    import asyncio
+
+    from shoot4fun_backend.adapters.outbound.memory.in_memory_account_repository import (
+        InMemoryAccountRepository,
+    )
+    from shoot4fun_backend.application.use_cases.acquire_item import (
+        AcquireItem,
+        ShopWriteLocks,
+    )
+    from shoot4fun_backend.container import _CATALOG_PATH
+    from shoot4fun_backend.domain.model.shop import load_catalog
+
+    class SuspendingRepo(InMemoryAccountRepository):
+        async def get_arsenal(self, user_id: str) -> dict | None:
+            await asyncio.sleep(0)
+            return await super().get_arsenal(user_id)
+
+        async def save_arsenal(self, user_id: str, envelope: dict) -> None:
+            await asyncio.sleep(0)
+            await super().save_arsenal(user_id, envelope)
+
+    repo = SuspendingRepo()
+    await repo.create_guest("usr_racer", "RacerOne")
+    catalog = load_catalog(_CATALOG_PATH)
+
+    # Per-request construction over ONE shared registry - the container's
+    # shape. Two instances must still serialize against each other.
+    locks = ShopWriteLocks()
+
+    async def acquire_via_request():
+        return await AcquireItem(repo, catalog, locks).execute(
+            "usr_racer", "onyx"
+        )
+
+    async def acquire_other_via_request():
+        return await AcquireItem(repo, catalog, locks).execute(
+            "usr_racer", "mayday"
+        )
+
+    results = await asyncio.gather(acquire_via_request(), acquire_other_via_request())
+    assert all(result.already_owned is False for result in results)
+
+    stored = await repo.get_arsenal("usr_racer")
+    owned_ids = {
+        entry.get("id")
+        for entry in stored["data"]["inventory"]
+        if isinstance(entry, dict)
+    }
+    assert owned_ids == {"onyx", "mayday"}

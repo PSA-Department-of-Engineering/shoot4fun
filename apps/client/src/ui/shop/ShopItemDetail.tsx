@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { useSession } from "@/ui/viewmodels/session";
 import {
@@ -26,9 +26,14 @@ const ShopItemDetail = () => {
     const gotoShopAcquired = useSession((s) => s.gotoShopAcquired);
     const item = useShop(selectSelectedItem);
     const acquire = useShop((s) => s.acquire);
+    const shopError = useShop((s) => s.error);
     const inventory = useArsenal(selectArsenalInventory);
     const ownedIds = inventoryEntryIds(inventory);
     const equipped = useArsenal(selectEquippedCosmetic);
+    // One unlock in flight at a time: a double-click must not fire two
+    // acquisitions (the server serializes per account; the UI does not
+    // offer the race).
+    const [unlocking, setUnlocking] = useState(false);
 
     useEffect(() => {
         void loadArsenalFromServer();
@@ -78,6 +83,12 @@ const ShopItemDetail = () => {
                     <Swatch spec={item.preview} />
                 </div>
 
+                {shopError ? (
+                    <p className="join__error" role="alert">
+                        {shopError}
+                    </p>
+                ) : null}
+
                 {owned ? (
                     <div className="shop-detail__owned" data-item-owned-panel>
                         {equipped === item.id ? (
@@ -92,14 +103,20 @@ const ShopItemDetail = () => {
                     <Button
                         variant="primary"
                         block
+                        disabled={unlocking}
                         onClick={async () => {
                             // Free unlock: no price to check (MON-001).
-                            const ok = await acquire(item.id);
-                            if (ok) gotoShopAcquired();
+                            setUnlocking(true);
+                            try {
+                                const ok = await acquire(item.id);
+                                if (ok) gotoShopAcquired();
+                            } finally {
+                                setUnlocking(false);
+                            }
                         }}
                         data-unlock={item.id}
                     >
-                        Unlock
+                        {unlocking ? "Unlocking…" : "Unlock"}
                     </Button>
                 )}
             </div>

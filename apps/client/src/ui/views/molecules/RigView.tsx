@@ -91,7 +91,8 @@ export const RigView = ({ cosmeticId, cosmeticSkin }: RigViewProps = {}) => {
                 .setEffectiveWeight(1)
                 .play();
             // An equipped cosmetic applies as soon as there is a rig to
-            // apply it to; the routine writes the observable attribute.
+            // apply it to; the routine writes the observable attribute -
+            // and stamps nothing when it paints nothing.
             const id = cosmeticIdRef.current;
             const spec = cosmeticRef.current;
             if (id && spec) {
@@ -118,11 +119,17 @@ export const RigView = ({ cosmeticId, cosmeticSkin }: RigViewProps = {}) => {
         };
     }, []);
 
-    // A cosmetic change while mounted re-runs the same shared routine.
+    // A cosmetic change while mounted re-runs the same shared routine; a
+    // cleared cosmetic clears the observable with it.
     useEffect(() => {
         const host = hostRef.current;
+        if (!host) return;
+        if (!cosmeticId || !cosmeticSkin) {
+            host.removeAttribute("data-equipped-skin");
+            return;
+        }
         const instance = instanceRef.current;
-        if (!host || !instance || !cosmeticId || !cosmeticSkin) return;
+        if (!instance) return;
         applyCosmetic({
             instance,
             itemId: cosmeticId,

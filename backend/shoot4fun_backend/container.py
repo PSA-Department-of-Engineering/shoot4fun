@@ -37,7 +37,10 @@ from shoot4fun_backend.application.ports.outbound.room_repository import RoomRep
 from shoot4fun_backend.application.services.account_service import AccountService
 from shoot4fun_backend.application.services.guess_budget import GuessBudget
 from shoot4fun_backend.application.services.match_service import MatchService
-from shoot4fun_backend.application.use_cases.acquire_item import AcquireItem
+from shoot4fun_backend.application.use_cases.acquire_item import (
+    AcquireItem,
+    ShopWriteLocks,
+)
 from shoot4fun_backend.application.use_cases.browse_catalog import BrowseCatalog
 from shoot4fun_backend.application.use_cases.equip_cosmetic import EquipCosmetic
 from shoot4fun_backend.domain.model.shop import Catalog, load_catalog
@@ -74,6 +77,16 @@ class Container:
         self._account_service: AccountService = AccountService(accounts=self._accounts)
         self._guess_budget: GuessBudget = GuessBudget()
         self._catalog: Catalog = load_catalog(_CATALOG_PATH)
+        # The shop's per-account critical sections are process-scoped and
+        # shared by every writer, so overlapping requests serialize even
+        # though the router builds its use case per request.
+        self._shop_locks = ShopWriteLocks()
+        self._acquire_item = AcquireItem(
+            accounts=self._accounts, catalog=self._catalog, locks=self._shop_locks
+        )
+        self._equip_cosmetic = EquipCosmetic(
+            accounts=self._accounts, catalog=self._catalog, locks=self._shop_locks
+        )
 
     def _build_leaderboard(self) -> LeaderboardRepository:
         dsn = os.environ.get("DATABASE_URL")
@@ -117,10 +130,10 @@ class Container:
         return BrowseCatalog(self._catalog)
 
     def acquire_item(self) -> AcquireItem:
-        return AcquireItem(accounts=self._accounts, catalog=self._catalog)
+        return self._acquire_item
 
     def equip_cosmetic(self) -> EquipCosmetic:
-        return EquipCosmetic(accounts=self._accounts, catalog=self._catalog)
+        return self._equip_cosmetic
 
     def room_repo(self) -> RoomRepository:
         return self._room_repo

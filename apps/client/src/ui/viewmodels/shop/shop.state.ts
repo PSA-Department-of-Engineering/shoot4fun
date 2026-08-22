@@ -13,6 +13,7 @@ import {
     fetchCatalog,
     type CatalogItem,
 } from "@/net/shopApi";
+import { AccountRequestError } from "@/net/accountApi";
 import { loadArsenalFromServer } from "@/ui/viewmodels/arsenal/arsenal.state";
 
 interface ShopState {
@@ -26,8 +27,8 @@ interface ShopState {
     acquiredItemId: string | null;
     loadCatalog: () => Promise<void>;
     selectItem: (itemId: string) => void;
-    /** Free-unlock the selected/owned item and refresh the Arsenal copy.
-     *  Returns whether the acquisition landed (false when refused). */
+    /** Free-unlock the item and refresh the Arsenal copy. Returns whether
+     *  the acquisition landed (false when refused; `error` says why). */
     acquire: (itemId: string) => Promise<boolean>;
 }
 
@@ -54,7 +55,7 @@ export const useShop = create<ShopState>()((set) => ({
         }
     },
 
-    selectItem: (itemId) => set({ selectedItemId: itemId }),
+    selectItem: (itemId) => set({ selectedItemId: itemId, error: null }),
 
     acquire: async (itemId) => {
         try {
@@ -64,7 +65,13 @@ export const useShop = create<ShopState>()((set) => ({
             await loadArsenalFromServer();
             set({ acquiredItemId: itemId });
             return result.already_owned || result.equipped !== undefined;
-        } catch {
+        } catch (error) {
+            set({
+                error:
+                    error instanceof AccountRequestError && error.status === 401
+                        ? "Your session expired. Sign in again to unlock."
+                        : "The unlock could not be completed. Try again shortly.",
+            });
             return false;
         }
     },

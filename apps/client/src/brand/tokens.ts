@@ -6,6 +6,7 @@
 export const BRAND = {
     primary: "12 95% 55%",
     primaryFg: "0 0% 100%",
+    secondary: "30 12% 92%",
     team1: "12 95% 55%",
     team2: "195 100% 50%",
     bg: "30 25% 95%",

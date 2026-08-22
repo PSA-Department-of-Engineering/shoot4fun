@@ -7,9 +7,18 @@ repository, so no second store exists. Evaluation order is part of the
 contract: ownership is checked BEFORE any mutation, so a re-acquire leaves
 both records and loadout untouched and the first acquisition's auto-equip
 fires at most once per item.
+
+Acquire is a read-modify-write over one document stored whole, so every
+writer for an account serializes on a SHARED per-user lock - shared meaning
+process-scoped (the container owns the registry and hands the same map to
+every use-case instance), or it guards nothing. Without it, overlapping
+acquires both pass the owns-check before either saves, and because saves
+are whole-envelope upserts the loser's record vanishes after its success
+response was already sent.
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -40,15 +49,51 @@ class AcquireResult:
     equipped: str | None
 
 
+class ShopWriteLocks:
+    """The process-scoped per-account critical sections every shop writer
+    shares. Owned by the composition root, so per-request instances still
+    serialize against each other."""
+
+    def __init__(self) -> None:
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    def for_user(self, user_id: str) -> asyncio.Lock:
+        lock = self._locks.get(user_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[user_id] = lock
+        return lock
+
+    def release_user(self, user_id: str) -> None:
+        """Drop the entry when nothing is queued on it, so the map does not
+        grow with the account table."""
+        lock = self._locks.get(user_id)
+        if lock is not None and not lock.locked():
+            self._locks.pop(user_id, None)
+
+
 class AcquireItem:
-    def __init__(self, accounts: AccountRepository, catalog: Catalog) -> None:
+    def __init__(
+        self,
+        accounts: AccountRepository,
+        catalog: Catalog,
+        locks: ShopWriteLocks,
+    ) -> None:
         self._accounts = accounts
         self._catalog = catalog
+        self._locks = locks
 
     async def execute(self, user_id: str, item_id: str) -> AcquireResult:
         if self._catalog.get(item_id) is None:
             raise EntityNotFoundError("catalog item", item_id)
+        # The whole read-modify-write is one critical section per account.
+        async with self._locks.for_user(user_id):
+            try:
+                return await self._acquire(user_id, item_id)
+            finally:
+                self._locks.release_user(user_id)
 
+    async def _acquire(self, user_id: str, item_id: str) -> AcquireResult:
         stored = await self._accounts.get_arsenal(user_id)
         envelope = (
             ArsenalEnvelope.parse(stored)
