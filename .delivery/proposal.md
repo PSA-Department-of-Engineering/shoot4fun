@@ -1,16 +1,16 @@
 ---
 phase: scope
 skill: deliver-engagement
-status: gate
+status: complete
 gate: proposal
 delivers: P1
-signed: pending
+signed: 2026-08-22
 reviewed: 2026-08-21
 run: 
 attempt: 1
 mode: interactive
 started: 2026-08-21T15:59:02Z
-finished: 
+finished: 2026-08-22T17:05:09Z
 credential_ref: 
 ---
 
@@ -45,3 +45,5 @@ Delivered line (frozen context, not re-driven): `shoot4fun-login-profile/P1` (lo
 - Monetization is deferred; acquisition is modeled as a free unlock/grant that writes an ownership record into the Arsenal envelope (ADR-0007). The currency/pricing model is an explicit out-of-scope decision for this phase.
 - "Apply to the player model" is in scope (per ticket #64's stated deliverables), not scope creep.
 
+
+> Gate closed: proposal signed 2026-08-22 by Carlos Dias over a passing fresh-eyes review (REF-Delivery.md section 1). Prose above predates the closure.
