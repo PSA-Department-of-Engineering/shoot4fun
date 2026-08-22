@@ -90,6 +90,43 @@ test.describe("account", () => {
     );
 
     intent(
+        "INT-024",
+        "account_service_failure_degrades_to_a_guest_offline_session",
+        async ({ browser }) => {
+            const page = await browser.newPage();
+
+            // Simulate the account service being unreachable: every account
+            // call fails the way a network partition would. The match server
+            // is a separate process and stays up, so this isolates the
+            // account-service failure the claim's degradation clause is about
+            // rather than taking the whole game down.
+            let accountCalls = 0;
+            await page.route("**/api/account/**", async (route) => {
+                accountCalls++;
+                await route.abort();
+            });
+
+            await page.goto("/");
+            // The entry screen still offers guest play, and choosing it is not
+            // gated on the account call succeeding: hydrate() lands in its
+            // offline phase instead of stranding the player at a wall.
+            await page.locator('[data-launch="guest"]').click();
+            await expect(page.locator('[data-tile="versus"]')).toBeVisible();
+
+            // And a guest still reaches a lobby and can ready up, so play is
+            // not blocked by the outage.
+            await page.locator('[data-tile="versus"]').click();
+            await page.locator('#player-name').fill('OfflineBot');
+            await page.locator('[data-create-room]').click();
+            await expect(page.locator('[data-ready]')).toBeVisible();
+
+            // The failure was actually exercised, so this is the degraded path
+            // and not a test that never touched the account service.
+            expect(accountCalls).toBeGreaterThan(0);
+        },
+    );
+
+    intent(
         "INT-025",
         "local_settings_reconcile_with_the_server_profile_across_sign_in",
         async ({ browser }) => {
