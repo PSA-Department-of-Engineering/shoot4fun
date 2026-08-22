@@ -94,6 +94,10 @@ truth.
 
 - **No migration.** Growth lands inside the opaque `data` object; older
   readers carry the new keys untouched.
+- **Write serialization is per process.** The shop's per-account critical
+  sections live in the composition root's lock registry, which is correct
+  for the deployed single-process service; running more than one replica
+  would need a cross-process guard before whole-envelope upserts are safe.
 - **Monetization later is additive.** A currency/pricing phase plugs into
   the same acquire choke point without reshaping ownership.
 - **The catalog scales by editing a JSON file.** If authoring ever stops

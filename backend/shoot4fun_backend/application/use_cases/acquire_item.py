@@ -65,8 +65,10 @@ class ShopWriteLocks:
         return lock
 
     def release_user(self, user_id: str) -> None:
-        """Drop the entry when nothing is queued on it, so the map does not
-        grow with the account table."""
+        """Drop the entry once nothing holds or waits on it. Called from
+        inside the critical section, so a contended lock is never popped;
+        an uncontended entry is removed at release, keeping the map at
+        roughly the set of accounts mid-write."""
         lock = self._locks.get(user_id)
         if lock is not None and not lock.locked():
             self._locks.pop(user_id, None)
