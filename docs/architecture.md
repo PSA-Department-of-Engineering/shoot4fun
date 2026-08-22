@@ -110,6 +110,8 @@ zero and nothing moves on screen.
 | Runtime boundary | `apps/client/src/app/GameRuntime.ts` | The one door between the imperative half (scene, socket, HUD) and React. Publishes plain data. |
 | HUD | `apps/client/src/ui/hud/Hud.ts` | Crosshair, health, ammo, score, hit feedback, respawn countdown. Written per snapshot, never through a component tree. |
 | Screens | `apps/client/src/ui/views/` | Entry, lobby, results, settings and the pointer-lock gate, as atoms through pages. |
+| Shop screens | `apps/client/src/ui/shop/` | Catalog grid, item detail, acquired-and-apply; whole-card links, Unlock on detail only. |
+| Cosmetics | `apps/client/src/scene/cosmetics.ts` | The one routine applying an owned item's material skin to the rig and stamping `data-equipped-skin` (COS-001). |
 | Screen state | `apps/client/src/ui/viewmodels/` | Session, room, settings, leaderboard and account, as state/actions/model triples. |
 
 ## The one duplicated routine
@@ -206,6 +208,9 @@ counter move in the playing state only.
 | `POST /api/account/sign-out` | Revoke this session server-side. |
 | `GET` / `PUT /api/account/profile` | The preferences that follow a signed-in player between devices. |
 | `GET` / `PUT /api/account/arsenal` | The player's Arsenal record (model + loadout), carried in a forward-compatible envelope that preserves unknown fields (ARS-004, ADR-0007). |
+| `GET /api/shop/catalog` | The validated static cosmetics catalog (CAT-001, ADR-0008). Public read; prices nothing. |
+| `POST /api/shop/acquire` | Free-unlock a catalog item into the caller's Arsenal envelope (`data.inventory` entry, auto-equip on first acquisition). Session-gated; idempotent on an owned item. |
+| `POST /api/shop/equip` | Set the equipped cosmetic (`data.loadout.cosmetic`). Only an owned item equips (ACQ-003). |
 
 Every route but the first three resolves the caller through the one choke point
 in `AccountService`; the session travels in `X-S4F-Session` or as a bearer

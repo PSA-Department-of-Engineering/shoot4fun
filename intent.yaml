@@ -1,4 +1,4 @@
-# Intent specification, shoot4fun
+﻿# Intent specification, shoot4fun
 #
 # One claim per proposal Req ID. Each claim is the only maintained
 # correctness spec for the system; the proposal's requirement spine is
@@ -504,7 +504,7 @@ INT-029:
 # (apps/client/e2e/shop.spec.ts).
 INT-030:
   version: 1.1.0
-  status: draft
+  status: active
   statement: "A signed-in player can browse the cosmetics catalog from the main menu: the catalog screen renders one card per item served by `GET /api/shop/catalog`, each card carrying its name, rarity treatment, and linking whole-card to the item's detail route."
   rationale: "SHOP-001 is the browse surface. Cards link whole-card per the locked interaction model; Unlock lives on detail only (INT-031), so browse alone never mutates state."
   derived_from: SHOP-001
@@ -516,7 +516,7 @@ INT-030:
 
 INT-031:
   version: 1.1.0
-  status: draft
+  status: active
   statement: "The item detail route renders the selected catalog item's name, description, preview, and rarity badge, and carries the Unlock affordance; no other route offers acquisition."
   rationale: "SHOP-002 pins the detail surface and the interaction model's placement rule: Unlock lives on detail only, so a player cannot acquire from the catalog grid."
   derived_from: SHOP-002
@@ -528,7 +528,7 @@ INT-031:
 
 INT-032:
   version: 1.1.0
-  status: draft
+  status: active
   statement: "The cosmetics catalog is a static authored source committed to the repo: its loader validates unique item ids, required fields (name, description, preview spec, rarity), and a rarity value within the five locked tiers, refusing the build on any violation; the validated catalog is what `GET /api/shop/catalog` serves."
   rationale: "CAT-001 fixes authorship and quality: no CMS, no runtime mutation - the catalog is code-reviewed content (assumption CAT-001/DATA-001). Validation participates in execution (synthesis governance): a malformed entry fails the suite, not the player's screen."
   derived_from: CAT-001
@@ -540,7 +540,7 @@ INT-032:
 
 INT-033:
   version: 1.1.0
-  status: draft
+  status: active
   statement: "`POST /api/shop/acquire` over an authenticated session writes an ownership record for the requested catalog item into the caller's Arsenal envelope and returns success; an unauthenticated call is refused with 401 before any state changes."
   rationale: "ACQ-001 names the shop the Arsenal acquisition entry point; the endpoint is the backend half. Monetization is out of scope this phase: acquisition is a free unlock/grant (assumption MON-001) - there is no price check to fail."
   derived_from: ACQ-001
@@ -552,7 +552,7 @@ INT-033:
 
 INT-034:
   version: 1.1.0
-  status: draft
+  status: active
   statement: "An acquired item persists inside the caller's Arsenal envelope as an entry appended to the existing `data.inventory` collection - `{ id, acquired_at }`, where presence IS the ownership record - written through the existing account/Arsenal repository, survives sign-out and sign-in on any client, and the acquisition visibly populates the Arsenal inventory surface."
   rationale: "ACQ-002 is persistence into the delivered envelope, not a new store (assumption DATA-001). The delivered shape already carries `data.inventory` (arsenal.state.ts DEFAULT_ARSENAL) and the Arsenal view binds to it (selectArsenalInventory) - so ownership rides the collection the view already reads, no read-path migration and no second source of truth. Appending structured entries is additive growth per ADR-0007. Dual attestation by design: the persistence half is integration-scoped below; the visible-population half carries an additional e2e marker on the unlock journey (shop.spec.ts asserts the inventory lists the acquired item), since rendering is not attestable from pytest."
   derived_from: ACQ-002
@@ -564,7 +564,7 @@ INT-034:
 
 INT-035:
   version: 1.1.0
-  status: draft
+  status: active
   statement: "Ownership is idempotent and entitlement is enforced: acquiring an already-owned item succeeds while leaving both the ownership records and the equipped loadout unchanged (no duplicates, no state churn), and only an owned item can be set as the equipped cosmetic."
   rationale: "ACQ-003 is the entitlement rule. Evaluation order is part of the claim (REF-CSD section 5): the acquire path checks ownership BEFORE writing or equipping, so the design's auto-equip fires exactly once per item and a repeated unlock can never corrupt the loadout."
   derived_from: ACQ-003
@@ -576,7 +576,7 @@ INT-035:
 
 INT-036:
   version: 1.1.0
-  status: draft
+  status: active
   statement: "Equipping an owned cosmetic applies that item's skin - a material change on the corresponding mesh region of the player model, per the catalog skin spec - through one shared application routine used by every surface that renders the model, and the rig view's host element carries `data-equipped-skin` set by that same routine, making the applied material observable by the test surface."
   rationale: "COS-001 is apply-to-model, pinned to material skins over the existing CharacterLibrary rig (operator decision 2026-08-22; assumption RENDER-001 resolved without new asset authoring). The observable is honest by construction: RigView mounts its own DOM host (ui/views/molecules/RigView.tsx) around a CharacterInstance, and the attribute is written by the apply routine itself - not parallel UI state. The match's local player has no third-person avatar, so the rig view is where 'the player model' visibly lives this phase. The Acquired screen mounts the same RigView molecule to show the just-applied skin - one rig surface, reused, not a second renderer."
   derived_from: COS-001
@@ -588,7 +588,7 @@ INT-036:
 
 INT-037:
   version: 1.1.0
-  status: draft
+  status: active
   statement: "The shop operates strictly over the authenticated account context: acquisitions and equip writes are scoped to the caller's account, so a second account never sees another account's owned items or equipped loadout, and the shop reads/writes ride the same session mechanism as `/api/account/*` (no second auth path)."
   rationale: "PLAT-001 reuses the delivered account/profile session (assumption PLAT-001 on main). Scoping is asserted cross-account because 'works when logged in' does not prove isolation."
   derived_from: PLAT-001
@@ -600,7 +600,7 @@ INT-037:
 
 INT-038:
   version: 1.1.0
-  status: draft
+  status: active
   statement: "Shop writes respect the Arsenal envelope contract (ADR-0007) without migration: after acquisitions and equip writes, the stored envelope keeps its original `version` and preserves unknown keys inside `data` byte-for-byte, so an over-shaped payload still round-trips losslessly through a post-shop read."
   rationale: "PLAT-002 extends INT-029's contract across the new writer: INT-029 proves the envelope tolerates foreign shapes; this proves the shop's own writes never violate what INT-029 guarantees. The two claims are complementary scopes over one contract, not duplicates."
   derived_from: PLAT-002
