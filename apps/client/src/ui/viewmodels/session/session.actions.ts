@@ -54,6 +54,18 @@ interface SessionActions {
     enterArsenal: () => void;
     /** Leave the Arsenal view and return to the main menu. */
     exitArsenal: () => void;
+    /** Open the shop catalog (from the main-menu tile or the Arsenal's
+     *  Browse shop affordance). */
+    enterShop: () => void;
+    /** Open an item's detail screen from the catalog. The item itself rides
+     *  the shop store's `selectItem`, called before this flips the screen. */
+    openShopItem: () => void;
+    /** The locked back path: detail -> catalog. */
+    backToShopCatalog: () => void;
+    /** The locked back path: catalog -> arsenal. */
+    exitShopToArsenal: () => void;
+    /** Show the Acquired & Apply screen after a successful unlock. */
+    gotoShopAcquired: () => void;
     noteStatus: (status: ConnectionStatus) => void;
     noteLatency: (latencyMs: number) => void;
     noteServerError: (error: ServerError) => void;
@@ -185,6 +197,16 @@ export const useSession = create<SessionState & SessionActions>()((set, get) => 
     enterArsenal: () => set({ screen: "arsenal" }),
 
     exitArsenal: () => set({ screen: "menu" }),
+
+    enterShop: () => set({ screen: "shop-catalog" }),
+
+    openShopItem: () => set({ screen: "shop-item" }),
+
+    backToShopCatalog: () => set({ screen: "shop-catalog" }),
+
+    exitShopToArsenal: () => set({ screen: "arsenal" }),
+
+    gotoShopAcquired: () => set({ screen: "shop-acquired" }),
 
     /* A dropped socket leaves the player where they were, told the truth
      * about it, rather than throwing them back to the entry screen. */

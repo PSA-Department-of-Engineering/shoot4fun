@@ -1596,3 +1596,158 @@ body {
     background: hsl(var(--background));
     font-size: 0.9375rem;
 }
+
+/* ------------------------------------------------------------------ Shop
+ *
+ * The catalog grid, item cards, rarity treatments, and the detail screen.
+ * The five-tier rarity legend (docs/brand.md) composes locked tokens only:
+ * a literal colour anywhere in here would be a defect. */
+
+.shop {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.shop__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.shop-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-3);
+    text-align: left;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition:
+        border-color var(--duration-fast) var(--ease),
+        transform var(--duration-fast) var(--ease),
+        box-shadow var(--duration-fast) var(--ease);
+}
+
+.shop-card:hover {
+    border-color: hsl(var(--primary));
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.shop-card__name {
+    font-weight: 600;
+    font-size: 0.9375rem;
+}
+
+.shop-card__owned {
+    align-self: flex-start;
+    padding: 0.0625rem var(--space-2);
+    border-radius: var(--radius-pill);
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* The swatch: the preview surface every card and the detail screen share.
+ * The fill colour comes from the item's token-backed spec via inline
+ * custom-property references; the frame is all tokens. */
+.swatch {
+    position: relative;
+    display: block;
+    height: 4.5rem;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+}
+
+.swatch__fill {
+    position: absolute;
+    inset: 0;
+    display: block;
+}
+
+/* The rarity legend (docs/brand.md). Common is outlined and muted; each
+ * higher tier fills with its token; Legendary runs the brand gradient.
+ * Dark-on-gold / dark-on-gradient per the locked accessibility note. */
+.rarity-badge {
+    align-self: flex-start;
+    padding: 0.125rem var(--space-2);
+    border-radius: var(--radius-pill);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.swatch--common .swatch__fill,
+.rarity-badge--common {
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+}
+
+.swatch--common .swatch__fill {
+    outline: 1px dashed hsl(var(--border));
+    outline-offset: -3px;
+}
+
+.rarity-badge--common {
+    border: 1px solid hsl(var(--border));
+}
+
+.swatch--uncommon .swatch__fill,
+.rarity-badge--uncommon {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+}
+
+.swatch--rare .swatch__fill,
+.rarity-badge--rare {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.swatch--epic .swatch__fill,
+.rarity-badge--epic {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+}
+
+.swatch--legendary .swatch__fill,
+.rarity-badge--legendary {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    color: hsl(var(--accent-foreground));
+}
+
+/* Detail + Acquired screens. */
+.shop-detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.shop-detail__preview {
+    position: relative;
+    display: block;
+    height: 8rem;
+    overflow: hidden;
+    border-radius: var(--radius);
+}
+
+.shop-acquired {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}

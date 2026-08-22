@@ -11,9 +11,16 @@ export type JoinPhase = "entry" | "joining" | "joined";
 
 /** Which pre-room screen is showing (issue #42). `launch` asks guest-vs-login;
  * `menu` is the growable front door both choices land on; `arsenal` is the
- * Arsenal view this line adds. The room flow itself is independent of this: a
- * joined room overrides all three. */
-export type MenuScreen = "launch" | "menu" | "arsenal";
+ * Arsenal view; the three shop screens are the locked flow catalog ->
+ * detail -> acquired (ADR-0008). The room flow itself is independent of
+ * these: a joined room overrides all of them. */
+export type MenuScreen =
+    | "launch"
+    | "menu"
+    | "arsenal"
+    | "shop-catalog"
+    | "shop-item"
+    | "shop-acquired";
 
 export interface SessionState {
     playerName: string;

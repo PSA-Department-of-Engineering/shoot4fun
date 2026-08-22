@@ -49,8 +49,8 @@ export const MENU_TILES: MenuTile[] = [
     {
         id: "shop",
         title: "Shop",
-        caption: "Skins, cases and cosmetics.",
-        status: "soon",
+        caption: "Skins and cosmetics. Unlock and apply to your rig.",
+        status: "ready",
         group: "store",
     },
 ];

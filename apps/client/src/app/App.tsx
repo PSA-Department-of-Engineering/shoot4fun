@@ -14,6 +14,9 @@ import MatchPage from "@/ui/views/pages/MatchPage";
 import ResultsPage from "@/ui/views/pages/ResultsPage";
 import SoloPage from "@/ui/views/pages/SoloPage";
 import Arsenal from "@/ui/views/pages/Arsenal";
+import ShopCatalog from "@/ui/shop/ShopCatalog";
+import ShopItemDetail from "@/ui/shop/ShopItemDetail";
+import ShopAcquired from "@/ui/shop/ShopAcquired";
 
 import { HudLayer } from "./HudLayer";
 import { SceneStage } from "./SceneStage";
@@ -43,11 +46,18 @@ const App = () => {
                 // (issue #15): it owns the screen while it is on.
                 <SoloPage />
             ) : joinPhase !== "joined" ? (
-                // No room yet: the launch screen, then the main menu.
+                // No room yet: the launch screen, then the main menu and
+                // its store surfaces.
                 menuScreen === "launch" ? (
                     <LaunchScreen />
                 ) : menuScreen === "arsenal" ? (
                     <Arsenal />
+                ) : menuScreen === "shop-catalog" ? (
+                    <ShopCatalog />
+                ) : menuScreen === "shop-item" ? (
+                    <ShopItemDetail />
+                ) : menuScreen === "shop-acquired" ? (
+                    <ShopAcquired />
                 ) : (
                     <MainMenu />
                 )

@@ -17,10 +17,12 @@ import { MENU_TILES, type MenuTile } from "./menuConfig";
  * rewritten when a tile is added. Tiles that are not built yet render
  * as disabled placeholders, so the menu shows the game's shape without
  * dead links. Versus opens the existing room/lobby flow; Practice opens
- * the existing solo range; Arsenal (issue #41) opens the Arsenal view. */
+ * the existing solo range; Arsenal (issue #41) opens the Arsenal view; Shop
+ * opens the cosmetics catalog (ADR-0008). */
 const MainMenu = () => {
     const enterSolo = useSession((s) => s.enterSolo);
     const enterArsenal = useSession((s) => s.enterArsenal);
+    const enterShop = useSession((s) => s.enterShop);
     const [panel, setPanel] = useState<"versus" | null>(null);
 
     const select = (tile: MenuTile): void => {
@@ -35,7 +37,10 @@ const MainMenu = () => {
             case "arsenal":
                 enterArsenal();
                 break;
-            // survival and shop are "soon": disabled above, never reach here.
+            case "shop":
+                enterShop();
+                break;
+            // survival is "soon": disabled above, never reaches here.
         }
     };
 
