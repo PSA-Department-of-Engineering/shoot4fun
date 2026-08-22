@@ -1,15 +1,15 @@
 ---
 phase: intent+plan
 skill: intent-session
-status: gate
+status: complete
 gate: plan
-signed: pending
+signed: 2026-08-22
 reviewed: 2026-08-22
 run: 
 attempt: 1
 mode: interactive
 started: 2026-08-22T17:18:17Z
-finished: 
+finished: 2026-08-22T17:49:34Z
 credential_ref: 
 ---
 
@@ -78,7 +78,7 @@ Executing the ship sequence in §8 end to end is in-grant without further enumer
 
 **Arsenal-envelope key conventions** (this line's additive growth per ADR-0007; write them into ADR-0008 before code). The delivered shape is `{ version: 1, data: { model: "robot", inventory: [] } }` and the Arsenal view already binds `data.inventory` (`apps/client/src/ui/viewmodels/arsenal/arsenal.state.ts`):
 
-- Ownership record = an entry in `data.inventory`: `{ "id": <catalog item id>, "acquired_at": <ISO-8601> }`. Presence in the collection IS ownership — no second source of truth, and acquisitions visibly populate the Arsenal the verbatim ask names. Legacy plain-string entries (none exist today) must not crash the join with catalog metadata.
+- Ownership record = an entry in `data.inventory`: `{ "id": "<catalog-item-id>", "acquired_at": "<ISO-8601>" }`. Presence in the collection IS ownership — no second source of truth, and acquisitions visibly populate the Arsenal the verbatim ask names. Legacy plain-string entries (none exist today) must not crash the join with catalog metadata.
 - Equipped cosmetic = `data.loadout.cosmetic`: the item id of the currently equipped skin (absent = none). Note: a top-level `loadout` field exists in `accountApi.ts`'s `ArsenalView` type, but ADR-0007's preservation contract covers keys *inside `data`* only — write `loadout` inside `data`, never as a sibling of it; a top-level key would be silently dropped by round-trips.
 - Both ride the envelope verbatim; older readers carry them untouched; `version` never changes. The shop never writes any other key.
 
@@ -206,3 +206,5 @@ Fallback — for an environment without the skill installed, the self-contained 
 > Execute `.delivery/handoff.md` in `D:\Personal\shoot4fun` end to end, autonomously. The authorization in the handoff §0 applies: push to `PSA-Department-of-Engineering/shoot4fun` (`main` + scratch ref `delivery/2026-08-21`), CI image publication to GHCR, no platform-repo actions, no new secrets. NOT authorized: monetization of any kind (currency/pricing/cases/gacha); writes to the estimation project; onboarding/offboarding/pause/freeze of apps, new hostnames, identity/event grants; scope beyond the P1 spine (no 3D viewer, no GLB/attachable assets, no CMS). Consult `.delivery/design.md`, `docs/` (the ADRs and the visual identity), `intent.yaml`, and the REFs the handoff references. Never stop to ask; if the handoff is silent, make the smallest reasonable choice and log it as a plan defect. Finish only at the §0 done-definition or a §10 degraded terminal state, then write the §11 final report and record it in `.delivery/build.md`.
 
 > Fresh-eyes review passed 2026-08-22 (VERDICT: PASS; artifact `.delivery/reviews/handoff-2026-08-22.md`); recorded in `reviewed:`. The plan gate awaits its signer (REF-Delivery.md section 1).
+
+> Gate closed: plan signed 2026-08-22 by Carlos Dias over a passing fresh-eyes review (REF-Delivery.md section 1). Prose above predates the closure.
