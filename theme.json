@@ -1,0 +1,25 @@
+{
+  "theme": {
+    "tokens": {
+      "--background": "30 25% 95%",
+      "--foreground": "15 10% 12%",
+      "--card": "30 25% 95%",
+      "--card-foreground": "15 10% 12%",
+      "--primary": "12 95% 55%",
+      "--primary-foreground": "0 0% 100%",
+      "--secondary": "30 12% 92%",
+      "--secondary-foreground": "15 10% 12%",
+      "--muted": "30 12% 88%",
+      "--muted-foreground": "15 8% 38%",
+      "--accent": "50 100% 50%",
+      "--accent-foreground": "15 10% 12%",
+      "--destructive": "0 72% 51%",
+      "--destructive-foreground": "0 0% 98%",
+      "--border": "30 12% 80%",
+      "--input": "30 12% 80%",
+      "--ring": "12 95% 55%",
+      "--radius": "0.5rem",
+      "--font-sans": "Inter, system-ui, sans-serif"
+    }
+  }
+}
