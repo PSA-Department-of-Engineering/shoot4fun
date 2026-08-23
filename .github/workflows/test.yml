@@ -29,7 +29,7 @@ on:
 jobs:
   backend:
     name: backend (pytest, ruff)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.fork && 'ubuntu-latest' || 'arc-dind' }}
     # The pg-gated round-trip tests (account lifecycle, arsenal, leaderboard)
     # run against this service; without it they skip, and a fault in the
     # adapters' real SQL ships green - which is exactly how the production
@@ -73,7 +73,7 @@ jobs:
 
   client:
     name: client (tsc, vitest)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.fork && 'ubuntu-latest' || 'arc-dind' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -97,7 +97,7 @@ jobs:
 
   e2e:
     name: e2e (two browsers, real server)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.fork && 'ubuntu-latest' || 'arc-dind' }}
     steps:
       - uses: actions/checkout@v4
 
