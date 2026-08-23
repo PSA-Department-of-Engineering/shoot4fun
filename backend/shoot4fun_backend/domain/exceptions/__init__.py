@@ -9,6 +9,7 @@ from shoot4fun_backend.domain.exceptions.display_name_taken_error import (
     DisplayNameTakenError,
 )
 from shoot4fun_backend.domain.exceptions.entity_not_found_error import EntityNotFoundError
+from shoot4fun_backend.domain.exceptions.guest_mint_error import GuestMintError
 from shoot4fun_backend.domain.exceptions.invalid_state_transition_error import (
     InvalidStateTransitionError,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "AuthenticationFailedError",
     "DisplayNameTakenError",
     "EntityNotFoundError",
+    "GuestMintError",
     "InvalidStateTransitionError",
     "RoomFullError",
 ]

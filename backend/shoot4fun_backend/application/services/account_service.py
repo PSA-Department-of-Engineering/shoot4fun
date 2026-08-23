@@ -30,6 +30,7 @@ from shoot4fun_backend.domain.exceptions.authentication_failed_error import (
 from shoot4fun_backend.domain.exceptions.display_name_taken_error import (
     DisplayNameTakenError,
 )
+from shoot4fun_backend.domain.exceptions.guest_mint_error import GuestMintError
 from shoot4fun_backend.domain.model.account import Account
 from shoot4fun_backend.domain.model.arsenal import ArsenalEnvelope
 from shoot4fun_backend.domain.model.credentials import (
@@ -129,7 +130,7 @@ class AccountService:
             if account is not None:
                 token = await self._issue_session(user_id)
                 return NewSession(account=account, token=token)
-        raise RuntimeError("could not mint an unused display name")
+        raise GuestMintError
 
     # ---- the choke point --------------------------------------------------
 
