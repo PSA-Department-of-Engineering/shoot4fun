@@ -95,3 +95,11 @@ The deployment is at `https://shoot4fun.chaos-architect.dev` once
 the platform-studio onboarding PR merges. The deployment evidence
 chain is captured in [`.delivery/build.md`](.delivery/build.md) (this
 file is created when the build run finishes).
+
+## Commits
+
+Every commit follows the platform's commit convention: a Conventional Commit
+subject and no co-author trailer. CI derives the version from the type and
+blocks release otherwise. The convention is documented on the platform
+portal's GitOps delivery page, under "Commit convention"; the committed
+`.pre-commit-config.yaml` checks it locally once installed (`pre-commit install`).
