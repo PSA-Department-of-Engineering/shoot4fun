@@ -155,3 +155,81 @@ Clearing action (platform runbook, not repo work):
 cleared, re-drive this phase — the build, its tests, and the diagnostic
 surface are all in place for the next roll to either heal the journey or
 print exactly which fault remains.
+
+## Re-drive round 3 (2026-08-23, probe only): the fault names itself, and it is repo-side
+
+One cache-busted probe of the parked journey:
+
+```
+POST /api/account/guest -> 500 {"error":"UndefinedColumnError","detail":"internal error"}
+```
+
+Both round-2 conclusions are corrected by that one line:
+
+1. **The pod DID roll.** A JSON body is 1.16.1's global handler; the empty
+   body round 2 saw was the pre-1.16.1 signature it used to infer a stalled
+   rollout. Nothing is stalled, so neither platform-side candidate holds.
+2. **The fault is schema drift, not a grant, an RLS policy or a lock.**
+   `UndefinedColumnError` means a column named in the write does not exist on
+   the production table.
+
+### The column
+
+`account_sessions.expires_at`. Commit `c449243` ("bound the guest table, and
+let the insert be the uniqueness check") added `expires_at TIMESTAMPTZ NOT
+NULL` **inside** the `CREATE TABLE IF NOT EXISTS account_sessions (...)`
+block and changed the session INSERT to name it, with no `ALTER` beside it.
+Against a prod `account_sessions` minted at #30's deploy the CREATE is a
+no-op, `expires_at` never appears, and every write that opens a session
+raises.
+
+That is the whole probe table from §10, explained without a second cause:
+
+| Probe | Why it behaved that way |
+|---|---|
+| `POST /api/account/guest` -> 500 | mints a row in `accounts` (fine), then INSERTs a session naming `expires_at` |
+| `POST /api/account/sign-in` (bogus) -> 401 | returns before any session INSERT |
+| `POST /api/leaderboard/sandbox/score` -> 200 | a different table, never touched by the drift |
+| `GET /api/shop/catalog`, `/arenas`, `/health` -> 200 | reads only |
+| `POST /api/shop/acquire` unauth -> 401 | gated before session use |
+
+Reads pass, other tables' writes pass, and only the session INSERT fails -
+which is why "INSERT privilege works" was true and still left the journey dead.
+
+### Why no test caught it
+
+CI and local Postgres mint every table fresh, so the CREATE block always
+produces the current shape. A round-trip test on an empty database attests the
+SQL and can never attest the *migration*. The drift is only reachable on a
+database that predates the column - which is to say, only on prod.
+
+Full drift audit of the schema block since #30 (`41de659`), so the re-drive
+fixes the class and not just the symptom:
+
+| Change | Covered? |
+|---|---|
+| `accounts.recovery_hash` -> `password_hash` (#54) | yes - the one hand-written `ALTER` pair |
+| `account_sessions.expires_at` (`c449243`) | **no - this is the live fault** |
+| `arsenal_profiles` (new table) | yes - a new `CREATE TABLE IF NOT EXISTS` is sufficient |
+| `account_profiles` | unchanged since #30 |
+
+Superseded: the round-2 clearing action (pod logs, `pg_locks`, role grants) is
+not the path, and no cluster access is needed.
+
+## Next command (supersedes both above)
+
+Re-drive this phase with `run-delivery-plan`, folding the migration into the
+run (operator decision, 2026-08-23) rather than filing it as a maintenance
+ticket. The re-drive owns the final shape; what the evidence asks for:
+
+1. An `ALTER TABLE account_sessions ADD COLUMN IF NOT EXISTS expires_at
+   TIMESTAMPTZ NOT NULL DEFAULT now()` beside the existing migration pair.
+   The `NOT NULL` needs the default: the column is declared `NOT NULL` with
+   none, and adding it bare to a table holding rows fails. `now()` reads the
+   pre-existing sessions as already expired, which is what they are - the
+   sweep drops them on the next pass.
+2. A pg test that attests the **upgrade**, not a fresh create: build the
+   pre-`c449243` table shape, run `connect()`, then mint a guest. Without it
+   the next column added inside a CREATE block reaches prod the same way.
+3. Ship, then re-run the §9.6 journey against the public URL - the step this
+   phase has never cleared.
