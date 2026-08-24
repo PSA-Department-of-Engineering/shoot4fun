@@ -12,3 +12,7 @@ shoot4fun:
   database:
     enabled: true
     secret: pg-app-shoot4fun
+  # System test accounts (carter, katael): the backend pins them to this
+  # password at every boot, so the admin password always opens both (#72).
+  systemAccounts:
+    password: psaadmin
