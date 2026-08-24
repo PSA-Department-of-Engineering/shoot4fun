@@ -9,9 +9,12 @@ shape, runs the real `connect()` against it, then drives the mint journey
 the fault broke. A round-trip on a fresh database can never see this drift,
 because there the CREATE always produces the current shape.
 
+The reshape briefly replaces `account_sessions` with its pre-expiry shape
+and restores it afterwards, so whatever rows the database carried when the
+test started are put back (the #51/#63 shared-database hygiene precedent).
 Skipped unless `TEST_DATABASE_URL` is set; CI carries a Postgres service so
-the skip is the exception, not the rule. Cleanup removes only the rows this
-module minted (the sentinel account and its cascade).
+the skip is the exception, not the rule. Cleanup removes only the accounts
+this module minted.
 """
 from __future__ import annotations
 
@@ -32,22 +35,48 @@ SENTINEL_USER = "usr_pg_upgrade_sentinel"
 LEGACY_TOKEN = "pre-expiry-legacy-session"
 
 
-def _reshape_to_pre_expiry() -> None:
-    """Recreate `account_sessions` as it existed before expiry shipped, so
-    the adapter's `connect()` meets a table its CREATE block cannot update."""
+def _connect():
     asyncpg = pytest.importorskip("asyncpg")
+    return asyncpg.connect(PG_DSN)
+
+
+def _purge_accounts(user_ids: list[str]) -> None:
+    """Delete accounts by id; sessions and envelopes cascade."""
 
     async def _run() -> None:
+        conn = await _connect()
+        try:
+            for user_id in user_ids:
+                await conn.execute(
+                    "DELETE FROM accounts WHERE user_id = $1", user_id
+                )
+        finally:
+            await conn.close()
+
+    asyncio.run(_run())
+
+
+def _reshape_to_pre_expiry() -> list[dict]:
+    """Recreate `account_sessions` as it existed before expiry shipped, so
+    the adapter's `connect()` meets a table its CREATE block cannot update.
+
+    Returns the rows the table carried, for restoration in the fixture's
+    finally block."""
+    async def _run() -> list[dict]:
         from shoot4fun_backend.adapters.outbound.postgres.postgres_account_repository import (  # noqa: E501
             _SCHEMA,
         )
 
-        conn = await asyncpg.connect(PG_DSN)
+        conn = await _connect()
         try:
             # Base tables first, so this module also works on a virgin
             # database where no prior connect() has run.
             await conn.execute(_SCHEMA)
-            await conn.execute("DROP TABLE IF EXISTS account_sessions")
+            carried = [
+                dict(r)
+                for r in await conn.fetch("SELECT * FROM account_sessions")
+            ]
+            await conn.execute("DROP TABLE account_sessions")
             await conn.execute(
                 "CREATE TABLE account_sessions ("
                 "  token_hash TEXT PRIMARY KEY,"
@@ -67,6 +96,48 @@ def _reshape_to_pre_expiry() -> None:
                 LEGACY_TOKEN,
                 SENTINEL_USER,
             )
+            return carried
+        finally:
+            await conn.close()
+
+    return asyncio.run(_run())
+
+
+def _restore_sessions(carried: list[dict]) -> None:
+    """Put the pre-test shape and rows back. Best effort by design: a test
+    database left one table newer than it started is survivable residue;
+    a crash inside the reshape is not this function's problem."""
+
+    async def _run() -> None:
+        from shoot4fun_backend.adapters.outbound.postgres.postgres_account_repository import (  # noqa: E501
+            _SCHEMA,
+        )
+
+        conn = await _connect()
+        try:
+            await conn.execute("DROP TABLE IF EXISTS account_sessions")
+            await conn.execute(_SCHEMA)
+            for row in carried:
+                if "expires_at" in row:
+                    await conn.execute(
+                        "INSERT INTO account_sessions"
+                        " (token_hash, user_id, created_at, expires_at)"
+                        " VALUES ($1, $2, $3, $4)"
+                        " ON CONFLICT DO NOTHING",
+                        row["token_hash"],
+                        row["user_id"],
+                        row["created_at"],
+                        row["expires_at"],
+                    )
+                else:
+                    await conn.execute(
+                        "INSERT INTO account_sessions"
+                        " (token_hash, user_id, created_at) VALUES ($1, $2, $3)"
+                        " ON CONFLICT DO NOTHING",
+                        row["token_hash"],
+                        row["user_id"],
+                        row["created_at"],
+                    )
         finally:
             await conn.close()
 
@@ -75,38 +146,29 @@ def _reshape_to_pre_expiry() -> None:
 
 @pytest.fixture()
 def upgraded_db(monkeypatch):
-    """The pre-expiry shape, then the app wired to it, lifespan included."""
-    _reshape_to_pre_expiry()
+    """The pre-expiry shape under the app, then everything put back."""
+    _purge_accounts([SENTINEL_USER])
     minted: list[str] = []
+    carried: list[dict] = []
     monkeypatch.setenv("DATABASE_URL", PG_DSN)
-    from fastapi.testclient import TestClient
+    try:
+        carried = _reshape_to_pre_expiry()
+        from fastapi.testclient import TestClient
 
-    from shoot4fun_backend.adapters.inbound.http.app import create_app
+        from shoot4fun_backend.adapters.inbound.http.app import create_app
 
-    with TestClient(create_app()) as client:
-        yield client, minted
-
-    asyncpg = pytest.importorskip("asyncpg")
-
-    async def _purge() -> None:
-        conn = await asyncpg.connect(PG_DSN)
-        try:
-            for user_id in [*minted, SENTINEL_USER]:
-                await conn.execute(
-                    "DELETE FROM accounts WHERE user_id = $1", user_id
-                )
-        finally:
-            await conn.close()
-
-    asyncio.run(_purge())
+        with TestClient(create_app()) as client:
+            yield client, minted
+    finally:
+        _restore_sessions(carried)
+        _purge_accounts([*minted, SENTINEL_USER])
 
 
 def test_expiry_column_migrates_tables_that_predate_it(upgraded_db) -> None:
     client, minted = upgraded_db
-    asyncpg = pytest.importorskip("asyncpg")
 
     async def _column_shape():
-        conn = await asyncpg.connect(PG_DSN)
+        conn = await _connect()
         try:
             return await conn.fetchrow(
                 "SELECT data_type, is_nullable, column_default"
@@ -121,19 +183,40 @@ def test_expiry_column_migrates_tables_that_predate_it(upgraded_db) -> None:
     assert shape is not None, "connect() did not add expires_at"
     assert shape["data_type"] == "timestamp with time zone"
     assert shape["is_nullable"] == "NO"
-    assert shape["column_default"] is not None
-    assert shape["column_default"].startswith("now()")
+    # No permanent default: a migrated table must match a freshly minted
+    # one, where the CREATE declares the column bare.
+    assert shape["column_default"] is None
 
-    # The carried row was backfilled as already expired: resolution honours
-    # the new column even for sessions minted before expiry existed.
+    # The carried row was backfilled as already expired - read directly,
+    # before the container's startup sweep can reclaim it, so the leg
+    # attests the backfill itself and not merely the row's absence.
+    async def _legacy_row():
+        conn = await _connect()
+        try:
+            return await conn.fetchrow(
+                "SELECT expires_at <= now() AS expired"
+                "  FROM account_sessions WHERE token_hash = $1",
+                LEGACY_TOKEN,
+            )
+        finally:
+            await conn.close()
+
+    legacy = asyncio.run(_legacy_row())
+    if legacy is not None:
+        assert legacy["expired"] is True
+
+    # Either way resolution honours expiry for the pre-expiry session...
     expired = client.get("/api/account/me", headers={SESSION: LEGACY_TOKEN})
     assert expired.status_code == 401
 
-    # And the journey the prod fault broke works against the migrated table.
+    # ...and the journey the prod fault broke works against the migrated
+    # table. The id is collected before the asserts so a failing mint is
+    # still purged.
     mint = client.post("/api/account/guest")
+    body = mint.json() if mint.status_code == 201 else {}
+    if body.get("user_id"):
+        minted.append(body["user_id"])
     assert mint.status_code == 201, mint.text
-    body = mint.json()
-    minted.append(body["user_id"])
 
     me = client.get("/api/account/me", headers={SESSION: body["token"]})
     assert me.status_code == 200

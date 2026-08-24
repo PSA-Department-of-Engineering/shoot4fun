@@ -56,8 +56,13 @@ CREATE TABLE IF NOT EXISTS account_sessions (
 -- Migration for tables that predate session expiry: the column above is
 -- only minted with the CREATE, which is a no-op on an existing table - on
 -- production that answered every session INSERT with UndefinedColumnError.
+-- The temporary default exists to satisfy NOT NULL while Postgres backfills
+-- the carried rows (as already expired, which they are - the sweep reclaims
+-- them); it is dropped again so a migrated table matches a freshly minted
+-- one instead of carrying its own insert semantics forever.
 ALTER TABLE account_sessions ADD COLUMN IF NOT EXISTS
     expires_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE account_sessions ALTER COLUMN expires_at DROP DEFAULT;
 CREATE INDEX IF NOT EXISTS account_sessions_user_idx ON account_sessions (user_id);
 
 CREATE TABLE IF NOT EXISTS account_profiles (
