@@ -110,3 +110,69 @@ def test_second_mint_is_an_independent_account(pg_client, minted_users) -> None:
         first["user_id"],
         second["user_id"],
     }
+
+
+LEGACY_ORPHAN = "usr_pg_legacy_orphan"
+
+
+@pytest_intent.intent("INT-019")
+def test_a_credentialess_legacy_account_is_claimed(pg_client, minted_users) -> None:
+    """The production fault the #54 migration left, against real SQL: every
+    account registered before it came out `registered = TRUE` with a NULL
+    `password_hash`, so sign-in refused it and the name could not be
+    re-registered. The repair is the claim: a live guest creating the name
+    upgrades the orphaned row in place, keeping its id and its data."""
+    asyncpg = pytest.importorskip("asyncpg")
+
+    import asyncio
+
+    async def _seed() -> None:
+        conn = await asyncpg.connect(PG_DSN)
+        try:
+            await conn.execute(
+                "INSERT INTO accounts (user_id, display_name, registered) "
+                "VALUES ($1, $2, TRUE) ON CONFLICT (user_id) DO NOTHING",
+                LEGACY_ORPHAN,
+                "Legacy Carter",
+            )
+            await conn.execute(
+                "INSERT INTO account_profiles ("
+                "  user_id, sensitivity, touch_sensitivity,"
+                "  master_volume, sfx_volume, haptics_enabled"
+                ") VALUES ($1, 0.004, 0.003, 0.6, 0.9, FALSE)"
+                " ON CONFLICT (user_id) DO NOTHING",
+                LEGACY_ORPHAN,
+            )
+        finally:
+            await conn.close()
+
+    asyncio.run(_seed())
+    minted_users.append(LEGACY_ORPHAN)
+
+    guest = _mint(pg_client)
+    minted_users.append(guest["user_id"])
+
+    created = pg_client.post(
+        "/api/account/create",
+        headers={SESSION: guest["token"]},
+        json={"display_name": "Legacy Carter", "password": "reclaim123"},
+    )
+    assert created.status_code == 200, created.text
+    # The SAME row: the orphaned id - and the profile keyed on it - survives.
+    assert created.json()["user_id"] == LEGACY_ORPHAN
+
+    me = pg_client.get("/api/account/me", headers={SESSION: guest["token"]})
+    assert me.status_code == 200
+    assert me.json()["user_id"] == LEGACY_ORPHAN
+
+    profile = pg_client.get("/api/account/profile", headers={SESSION: guest["token"]})
+    assert profile.status_code == 200
+    assert profile.json()["sensitivity"] == 0.004
+
+    # The chosen password opens the account from a device holding no session.
+    signed = pg_client.post(
+        "/api/account/sign-in",
+        json={"display_name": "legacy carter", "password": "reclaim123"},
+    )
+    assert signed.status_code == 200, signed.text
+    assert signed.json()["user_id"] == LEGACY_ORPHAN

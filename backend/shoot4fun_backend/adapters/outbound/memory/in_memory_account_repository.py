@@ -91,6 +91,34 @@ class InMemoryAccountRepository(AccountRepository):
         self._accounts[user_id] = renamed
         return renamed
 
+    async def adopt_orphaned(
+        self, display_name: str, password_hash: str, session_user_id: str
+    ) -> Account | None:
+        """Mirrors the Postgres adapter's conditional UPDATE: the claim wins
+        only when the name is held by a registered account with no digest on
+        file, so of two racing callers exactly one gets the row."""
+        orphan = await self.find_by_display_name(display_name)
+        if orphan is None or not orphan.registered:
+            return None
+        if self._passwords.get(orphan.user_id) is not None:
+            return None
+        adopted = Account(
+            user_id=orphan.user_id,
+            display_name=display_name,
+            registered=True,
+            created_at=orphan.created_at,
+            external_issuer=orphan.external_issuer,
+            external_subject=orphan.external_subject,
+        )
+        self._accounts[orphan.user_id] = adopted
+        self._passwords[orphan.user_id] = password_hash
+        # The adopting caller's sessions move onto the claimed account; any
+        # session the orphan still carries stays exactly where it is.
+        for token_hash, user_id in list(self._sessions.items()):
+            if user_id == session_user_id:
+                self._sessions[token_hash] = orphan.user_id
+        return adopted
+
     async def password_hash_for(self, user_id: str) -> str | None:
         return self._passwords.get(user_id)
 

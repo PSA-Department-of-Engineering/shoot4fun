@@ -186,6 +186,19 @@ class AccountService:
         that already holds a name only renames it and leaves the password alone:
         a session alone must not be able to retire the owner's credential, which
         is why rotation demands proof of the current one.
+
+        The one exception is a named account that holds no credential. The
+        password-auth migration (#54) dropped `recovery_hash` while adding an
+        empty `password_hash`, leaving every account registered before it with
+        `registered = TRUE` and a NULL digest: sign-in can never open such a
+        row and re-registering the name is refused, so it is unreachable by
+        construction - not even its owner can reach it, and a still-live
+        pre-migration session cannot set a password either, because rotation
+        verifies against the same missing digest. Letting a live guest claim
+        such a row in place is the only repair that keeps the name and the
+        scores it carries. The claim is the store's conditional update, so of
+        two callers racing for the same orphan exactly one wins and the other
+        still sees the name as taken.
         """
         if len(password or "") < PASSWORD_MIN_LENGTH:
             raise ValueError(
@@ -194,7 +207,16 @@ class AccountService:
         cleaned = normalize_display_name(display_name)
         owner = await self._accounts.find_by_display_name(cleaned)
         if owner is not None and owner.user_id != user_id:
-            raise DisplayNameTakenError(cleaned)
+            existing = await self._accounts.get(user_id)
+            if existing is not None and existing.registered:
+                raise DisplayNameTakenError(cleaned)
+            adopted = await self._accounts.adopt_orphaned(
+                cleaned, hash_secret(password), user_id
+            )
+            if adopted is None:
+                raise DisplayNameTakenError(cleaned)
+            _log.info("orphaned account claimed", extra={"user_id": adopted.user_id})
+            return adopted
 
         existing = await self._accounts.get(user_id)
         if existing is not None and existing.registered:
