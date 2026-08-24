@@ -1,12 +1,12 @@
 ---
 phase: build-ship
 skill: run-delivery-plan
-status: aborted
+status: gate
 gate: delivery
 signed: pending
-reviewed: 2026-08-22
+reviewed: 2026-08-24
 run: 
-attempt: 1
+attempt: 2
 mode: interactive
 started: 2026-08-22T18:30:00Z
 finished: 2026-08-23T00:45:00Z
@@ -233,3 +233,87 @@ ticket. The re-drive owns the final shape; what the evidence asks for:
    the next column added inside a CREATE block reaches prod the same way.
 3. Ship, then re-run the §9.6 journey against the public URL - the step this
    phase has never cleared.
+
+## Re-drive round 4 (2026-08-24): the migration shipped, the journey is live
+
+Round 3's prescription executed to the letter, then hardened by review:
+
+1. `a2e7b8b` (`fix(accounts)`): `ALTER TABLE account_sessions ADD COLUMN IF
+   NOT EXISTS expires_at TIMESTAMPTZ NOT NULL DEFAULT now()` beside the #54
+   pair, plus the pg **upgrade** test
+   (`backend/tests/integration/test_account_pg_upgrade.py`): rebuilds the
+   pre-`c449243` table shape, runs the real `connect()`, asserts column
+   shape, drives the mint journey. Local suite against a real Postgres
+   (Docker `postgres:16`): **123 passed, 0 skipped**; mutation check proved
+   the test fails with the ALTER reverted - it attests the repair, not the SQL.
+2. Shipped **v1.16.2** (CI green in 12m on the in-cluster runners); prod
+   answered `POST /api/account/guest` **201** within the hour - the wall
+   from rounds 1-3 is down.
+3. Fresh-eyes adversarial review of the delta (verbatim:
+   `reviews/build-2026-08-24.md`): VERDICT PASS, zero blockers, two MAJORs -
+   (a) the permanent `DEFAULT now()` diverged migrated from fresh schemas,
+   (b) the upgrade test dropped a shared database's sessions. Both fixed in
+   `7b1cf8b`: the default exists only for the backfill and is dropped in the
+   same schema pass (test asserts the converged shape); the test snapshots
+   and restores carried rows and purges its sentinel regardless of where
+   setup fails.
+4. Re-shipped as **v1.16.3** and re-ran the whole chain against it.
+
+### §9 evidence chain (final, at v1.16.3)
+
+1. CI green on shipping commit `7b1cf8b`: test run
+   https://github.com/PSA-Department-of-Engineering/shoot4fun/actions/runs/32712280702,
+   ci-caller https://github.com/PSA-Department-of-Engineering/shoot4fun/actions/runs/32712281292.
+2. GHCR packages `shoot4fun-server` / `-client` / `-docs` all present at **1.16.3**.
+3. Promotion write-back: deploy-chaos commit `21e9584f543d`
+   (2026-08-24T09:40:02Z) pins all three tags to 1.16.3.
+4. Install evidence (studio `app_status`): stage **serving**, every link ok;
+   promotion ok at 1.16.3.
+5. Freshness postdating the release: cache-busted `POST /api/account/guest`
+   → **201** (behavior that exists only in ≥1.16.2 - 1.16.1 answered
+   `UndefinedColumnError`; the health endpoint's "0.1.0" remains the known
+   hardcoded package version), plus foundry INT-012's cache-busted probe
+   with freshness headers asserted.
+6. App-specific smoke, both forms:
+   - API journey against https://shoot4fun.chaos-architect.dev: mint guest →
+     catalog (10 items across common/uncommon/rare/epic/legendary) → acquire
+     `drab-canvas` (auto-equipped) → arsenal envelope v1 with
+     `inventory=[drab-canvas]`, `loadout.cosmetic=drab-canvas` → acquire +
+     equip `onyx` → envelope shows `inventory=[drab-canvas,onyx]`,
+     `loadout.cosmetic=onyx` → unauthenticated acquire **401**, unknown-item
+     equip **404**. Ownership persisted into the delivered Arsenal envelope
+     exactly per ADR-0007/0008.
+   - Browser-level: opt-in foundry suite pointed at prod — INT-011
+     two-player ready-up-and-start handshake and INT-012 probe, **2 passed**
+     (run twice: once at 1.16.2, once at 1.16.3).
+
+Verification at close of build: backend pytest **123 passed** locally
+against real Postgres (CI attests the same with its Postgres service);
+vitest passed, `tsc --noEmit && vite build` clean; `csd-intent` audit
+**CLEAN** (38 claims, nine shop claims active and attested); postflight GO.
+
+Plan defects encountered this round (smallest-reasonable choices, logged):
+
+1. The first probes this session read empty bodies off the faulting POST via
+   PowerShell's error stream while curl showed the JSON signature - a probe
+   harness artifact, not an app state change. All evidence reads moved to
+   curl.exe (round 3's instrument-first lesson, learned again).
+2. Local git state predated decisions/0003: the scratch ref had diverged
+   from its migrated remote shape (records at branch root). Reset to origin
+   before writing records; no content lost (the migration commit was
+   byte-identical by declaration and verified).
+
+## Next command (final)
+
+Done-definition reached. In order for the operator:
+
+1. Demo the shipped app to the customer against the claims table -
+   https://shoot4fun.chaos-architect.dev, shop journey browse → detail →
+   unlock → applied, acquisitions visible in the Arsenal inventory.
+2. On acceptance, close the delivery gate through the gate helper (the only
+   writer of `signed:`):
+   `python stamp_gate.py --repo <repo-root> --record build.md --date <acceptance date> --by "<the customer>"`.
+3. Then run `reconcile-delivery <repo-root>` (its pre-flight refuses an
+   unsigned delivery gate).
+
+> Fresh-eyes review passed 2026-08-24 (VERDICT: PASS; artifact `reviews/build-2026-08-24.md`); recorded in `reviewed:`. The delivery gate awaits its signer (REF-Delivery.md section 1).
