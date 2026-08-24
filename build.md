@@ -1,9 +1,9 @@
 ---
 phase: build-ship
 skill: run-delivery-plan
-status: gate
+status: complete
 gate: delivery
-signed: pending
+signed: 2026-08-24
 reviewed: 2026-08-24
 run: 
 attempt: 2
@@ -317,3 +317,5 @@ Done-definition reached. In order for the operator:
    unsigned delivery gate).
 
 > Fresh-eyes review passed 2026-08-24 (VERDICT: PASS; artifact `reviews/build-2026-08-24.md`); recorded in `reviewed:`. The delivery gate awaits its signer (REF-Delivery.md section 1).
+
+> Gate closed: delivery signed 2026-08-24 by Carlos Dias over a passing fresh-eyes review (REF-Delivery.md section 1). Prose above predates the closure.
