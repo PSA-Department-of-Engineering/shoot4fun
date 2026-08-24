@@ -53,6 +53,11 @@ CREATE TABLE IF NOT EXISTS account_sessions (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at  TIMESTAMPTZ NOT NULL
 );
+-- Migration for tables that predate session expiry: the column above is
+-- only minted with the CREATE, which is a no-op on an existing table - on
+-- production that answered every session INSERT with UndefinedColumnError.
+ALTER TABLE account_sessions ADD COLUMN IF NOT EXISTS
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT now();
 CREATE INDEX IF NOT EXISTS account_sessions_user_idx ON account_sessions (user_id);
 
 CREATE TABLE IF NOT EXISTS account_profiles (
