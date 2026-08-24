@@ -70,3 +70,11 @@ database:
   host: shared-rw.databases.svc.cluster.local
   port: 5432
   name: shoot4fun
+
+# The deployment's system test accounts (carter, katael). The backend pins
+# them at every boot to this password - created, claimed, or restated, so the
+# admin password always opens them (see .env.example). Empty means the
+# deployment carries no system accounts and the chart renders neither the
+# Secret nor the env var.
+systemAccounts:
+  password: ""
