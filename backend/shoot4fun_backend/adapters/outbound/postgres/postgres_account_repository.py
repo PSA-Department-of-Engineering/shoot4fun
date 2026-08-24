@@ -186,6 +186,76 @@ class PostgresAccountRepository(AccountRepository):
             )
         return _to_account(row)
 
+    async def ensure_system_account(
+        self, user_id: str, display_name: str, password_hash: str
+    ) -> Account | None:
+        """One pinned row per boot, whichever way the store sits. The three
+        steps run in one transaction: claim a credentialess row holding the
+        name (its id - and the data keyed on it - survives), else restate the
+        pin row, else insert it. A unique-index violation means a credentialed
+        account other than the pin row holds the name, and the boot leaves it
+        exactly as it found it rather than overriding a working credential."""
+        async with self._ready.acquire() as conn, conn.transaction():
+            try:
+                row = await conn.fetchrow(
+                    f"UPDATE accounts SET password_hash = $2, registered = TRUE "
+                    f"WHERE lower(display_name) = lower($1) "
+                    f"AND password_hash IS NULL "
+                    f"RETURNING {_ACCOUNT_COLUMNS}",
+                    display_name,
+                    password_hash,
+                )
+                if row is None:
+                    row = await conn.fetchrow(
+                        f"UPDATE accounts SET display_name = $2, "
+                        f"password_hash = $3, registered = TRUE "
+                        f"WHERE user_id = $1 RETURNING {_ACCOUNT_COLUMNS}",
+                        user_id,
+                        display_name,
+                        password_hash,
+                    )
+                if row is None:
+                    row = await conn.fetchrow(
+                        f"INSERT INTO accounts (user_id, display_name, "
+                        f"password_hash, registered) "
+                        f"VALUES ($1, $2, $3, TRUE) "
+                        f"RETURNING {_ACCOUNT_COLUMNS}",
+                        user_id,
+                        display_name,
+                        password_hash,
+                    )
+            except asyncpg.UniqueViolationError:
+                return None
+        return _to_account(row) if row is not None else None
+
+    async def adopt_orphaned(
+        self, display_name: str, password_hash: str, session_user_id: str
+    ) -> Account | None:
+        """The conditional UPDATE is the whole claim: `password_hash IS NULL`
+        is the state only a pre-password row can be in, so of two callers
+        racing for the same orphan exactly one UPDATE matches a row and the
+        other returns none. Session re-pointing rides the same transaction, so
+        the caller never holds a session that resolves to the guest row they
+        came from while the claimed account answers for it."""
+        async with self._ready.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                f"UPDATE accounts SET display_name = $2, password_hash = $3 "
+                f"WHERE lower(display_name) = lower($1) "
+                f"AND registered = TRUE AND password_hash IS NULL "
+                f"RETURNING {_ACCOUNT_COLUMNS}",
+                display_name,
+                display_name,
+                password_hash,
+            )
+            if row is None:
+                return None
+            await conn.execute(
+                "UPDATE account_sessions SET user_id = $1 WHERE user_id = $2",
+                row["user_id"],
+                session_user_id,
+            )
+        return _to_account(row)
+
     async def password_hash_for(self, user_id: str) -> str | None:
         async with self._ready.acquire() as conn:
             return await conn.fetchval(
@@ -234,7 +304,7 @@ class PostgresAccountRepository(AccountRepository):
     async def sweep(self, grace_ms: int) -> int:
         """Expired sessions first, so the guests they were holding up fall in
         the same pass. ``registered`` is the guard that matters: a named
-        account owns a recovery code and is reachable with no session at all."""
+        account owns a password and is reachable with no session at all."""
         async with self._ready.acquire() as conn:
             await conn.execute("DELETE FROM account_sessions WHERE expires_at < now()")
             status = await conn.execute(

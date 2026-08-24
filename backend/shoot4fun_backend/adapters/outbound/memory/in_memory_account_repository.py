@@ -91,6 +91,66 @@ class InMemoryAccountRepository(AccountRepository):
         self._accounts[user_id] = renamed
         return renamed
 
+    async def ensure_system_account(
+        self, user_id: str, display_name: str, password_hash: str
+    ) -> Account | None:
+        """Mirrors the Postgres adapter's three-step pin: claim a
+        credentialess row holding the name, else restate the pin row, else
+        insert it; None when a credentialed account holds the name."""
+        holder = await self.find_by_display_name(display_name)
+        if holder is not None and self._passwords.get(holder.user_id) is None:
+            target = holder
+        else:
+            target = self._accounts.get(user_id)
+            if target is None:
+                if holder is not None:
+                    return None
+                target = Account(
+                    user_id=user_id,
+                    display_name=display_name,
+                    registered=True,
+                    created_at=_now(),
+                )
+        account = Account(
+            user_id=target.user_id,
+            display_name=display_name,
+            registered=True,
+            created_at=target.created_at,
+            external_issuer=target.external_issuer,
+            external_subject=target.external_subject,
+        )
+        self._accounts[target.user_id] = account
+        self._passwords[target.user_id] = password_hash
+        return account
+
+    async def adopt_orphaned(
+        self, display_name: str, password_hash: str, session_user_id: str
+    ) -> Account | None:
+        """Mirrors the Postgres adapter's conditional UPDATE: the claim wins
+        only when the name is held by a registered account with no digest on
+        file, so of two racing callers exactly one gets the row."""
+        orphan = await self.find_by_display_name(display_name)
+        if orphan is None or not orphan.registered:
+            return None
+        if self._passwords.get(orphan.user_id) is not None:
+            return None
+        adopted = Account(
+            user_id=orphan.user_id,
+            display_name=display_name,
+            registered=True,
+            created_at=orphan.created_at,
+            external_issuer=orphan.external_issuer,
+            external_subject=orphan.external_subject,
+        )
+        self._accounts[orphan.user_id] = adopted
+        self._passwords[orphan.user_id] = password_hash
+        # The adopting caller's sessions move onto the claimed account; any
+        # session the orphan still carries stays exactly where it is.
+        for token_hash, user_id in list(self._sessions.items()):
+            if user_id == session_user_id:
+                self._sessions[token_hash] = orphan.user_id
+        return adopted
+
     async def password_hash_for(self, user_id: str) -> str | None:
         return self._passwords.get(user_id)
 

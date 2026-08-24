@@ -39,6 +39,39 @@ class AccountRepository(Protocol):
 
     async def rename(self, user_id: str, display_name: str) -> Account: ...
 
+    async def ensure_system_account(
+        self, user_id: str, display_name: str, password_hash: str
+    ) -> Account | None:
+        """Pin a system account by its deterministic id, however the store
+        currently sits: created when the name is free, restated when the pin
+        row already exists, and claimed in place when the name is held by a
+        row with no digest on file (the state the #54 migration left the
+        deployment's own system accounts in) - claimed, so the data keyed on
+        that row's id survives. Answers the pinned account, or None when a
+        credentialed account other than the pin row holds the name: a boot
+        never overrides a credential that works.
+        """
+        ...
+
+    async def adopt_orphaned(
+        self, display_name: str, password_hash: str, session_user_id: str
+    ) -> Account | None:
+        """Claim a named account that holds no credential, in place.
+
+        An account that is registered with no password digest on file is
+        unreachable by construction: sign-in refuses it, registration of the
+        name is refused, and no session can be minted for it. The adopting
+        caller's live sessions move onto the claimed account, so the caller
+        stays signed in under the session they already hold and the guest row
+        they came from falls to the sweep. Any sessions the orphan still
+        carries are left alone - they belong to whoever is already inside.
+
+        Answers the adopted account, or None when the name is not held by a
+        credential-less registered account. The conditional update IS the race
+        check: of two callers claiming the same orphan, exactly one wins.
+        """
+        ...
+
     async def password_hash_for(self, user_id: str) -> str | None: ...
 
     async def set_password_hash(self, user_id: str, password_hash: str) -> None: ...

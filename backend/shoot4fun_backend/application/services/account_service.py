@@ -18,6 +18,7 @@ touching a router.
 """
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 
@@ -175,6 +176,38 @@ class AccountService:
 
     # ---- registration and recovery ----------------------------------------
 
+    async def ensure_system_account(
+        self, display_name: str, password: str
+    ) -> Account | None:
+        """Pin a system account: it exists, it is named, and this password
+        opens it - at every boot, so the guarantee outlives whatever a test
+        did to the account the boot before.
+
+        System accounts are the deployment's known test logins (the default
+        pair is `carter` and `katael`). They live under deterministic ids, so
+        the pin finds its row however the store sits: a missing account is
+        created, an existing one has its digest restated, and a credentialess
+        row holding the name - the state the #54 migration left this
+        deployment's own accounts in - is claimed in place, keeping the data
+        keyed on its id. Pinning deliberately overrides change-password for
+        these rows: they are infrastructure, not player state, and the admin
+        password must always work. The one refusal is a credentialed account
+        holding the name - a boot never overrides a credential that works.
+        """
+        if len(password or "") < PASSWORD_MIN_LENGTH:
+            raise ValueError(
+                f"password must be at least {PASSWORD_MIN_LENGTH} characters"
+            )
+        cleaned = normalize_display_name(display_name)
+        stem = re.sub(r"[^a-z0-9]", "", cleaned.casefold())
+        user_id = f"usr_system_{stem}"
+        account = await self._accounts.ensure_system_account(
+            user_id, cleaned, hash_secret(password)
+        )
+        if account is not None:
+            _log.info("system account pinned", extra={"user_id": user_id})
+        return account
+
     async def create_account(
         self, user_id: str, display_name: str, password: str
     ) -> Account:
@@ -186,6 +219,19 @@ class AccountService:
         that already holds a name only renames it and leaves the password alone:
         a session alone must not be able to retire the owner's credential, which
         is why rotation demands proof of the current one.
+
+        The one exception is a named account that holds no credential. The
+        password-auth migration (#54) dropped `recovery_hash` while adding an
+        empty `password_hash`, leaving every account registered before it with
+        `registered = TRUE` and a NULL digest: sign-in can never open such a
+        row and re-registering the name is refused, so it is unreachable by
+        construction - not even its owner can reach it, and a still-live
+        pre-migration session cannot set a password either, because rotation
+        verifies against the same missing digest. Letting a live guest claim
+        such a row in place is the only repair that keeps the name and the
+        scores it carries. The claim is the store's conditional update, so of
+        two callers racing for the same orphan exactly one wins and the other
+        still sees the name as taken.
         """
         if len(password or "") < PASSWORD_MIN_LENGTH:
             raise ValueError(
@@ -194,7 +240,16 @@ class AccountService:
         cleaned = normalize_display_name(display_name)
         owner = await self._accounts.find_by_display_name(cleaned)
         if owner is not None and owner.user_id != user_id:
-            raise DisplayNameTakenError(cleaned)
+            existing = await self._accounts.get(user_id)
+            if existing is not None and existing.registered:
+                raise DisplayNameTakenError(cleaned)
+            adopted = await self._accounts.adopt_orphaned(
+                cleaned, hash_secret(password), user_id
+            )
+            if adopted is None:
+                raise DisplayNameTakenError(cleaned)
+            _log.info("orphaned account claimed", extra={"user_id": adopted.user_id})
+            return adopted
 
         existing = await self._accounts.get(user_id)
         if existing is not None and existing.registered:

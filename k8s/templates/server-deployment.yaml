@@ -22,13 +22,14 @@ spec:
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
             - containerPort: {{ .Values.server.port }}
-          {{- if .Values.database.enabled }}
-          # DATABASE_URL is composed from the platform-minted credential
-          # (pg-app-shoot4fun, reflected into this namespace), which the backend's
-          # container reads to pick the Postgres leaderboard over the in-memory
-          # one. kubelet expands $(VAR) against env entries declared earlier in
-          # this same container, so the password is never written into a manifest.
+          {{- if or .Values.database.enabled .Values.systemAccounts.password }}
           env:
+            {{- if .Values.database.enabled }}
+            # DATABASE_URL is composed from the platform-minted credential
+            # (pg-app-shoot4fun, reflected into this namespace), which the backend's
+            # container reads to pick the Postgres leaderboard over the in-memory
+            # one. kubelet expands $(VAR) against env entries declared earlier in
+            # this same container, so the password is never written into a manifest.
             - name: PGUSER
               valueFrom:
                 secretKeyRef:
@@ -41,4 +42,16 @@ spec:
                   key: password
             - name: DATABASE_URL
               value: postgresql://$(PGUSER):$(PGPASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}
+            {{- end }}
+            {{- if .Values.systemAccounts.password }}
+            # The switch the backend's boot pins the system test accounts on
+            # (carter, katael). Read from the Secret this chart renders below,
+            # so the password crosses the API server once instead of riding
+            # every pod spec.
+            - name: SYSTEM_ACCOUNT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "shoot4fun.name" . }}-system-accounts
+                  key: password
+            {{- end }}
           {{- end }}

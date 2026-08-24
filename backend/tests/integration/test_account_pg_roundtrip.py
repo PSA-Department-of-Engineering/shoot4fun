@@ -110,3 +110,138 @@ def test_second_mint_is_an_independent_account(pg_client, minted_users) -> None:
         first["user_id"],
         second["user_id"],
     }
+
+
+LEGACY_ORPHAN = "usr_pg_legacy_orphan"
+
+
+@pytest_intent.intent("INT-019")
+def test_a_credentialess_legacy_account_is_claimed(pg_client, minted_users) -> None:
+    """The production fault the #54 migration left, against real SQL: every
+    account registered before it came out `registered = TRUE` with a NULL
+    `password_hash`, so sign-in refused it and the name could not be
+    re-registered. The repair is the claim: a live guest creating the name
+    upgrades the orphaned row in place, keeping its id and its data."""
+    asyncpg = pytest.importorskip("asyncpg")
+
+    import asyncio
+
+    async def _seed() -> None:
+        conn = await asyncpg.connect(PG_DSN)
+        try:
+            await conn.execute(
+                "INSERT INTO accounts (user_id, display_name, registered) "
+                "VALUES ($1, $2, TRUE) ON CONFLICT (user_id) DO NOTHING",
+                LEGACY_ORPHAN,
+                "Legacy Carter",
+            )
+            await conn.execute(
+                "INSERT INTO account_profiles ("
+                "  user_id, sensitivity, touch_sensitivity,"
+                "  master_volume, sfx_volume, haptics_enabled"
+                ") VALUES ($1, 0.004, 0.003, 0.6, 0.9, FALSE)"
+                " ON CONFLICT (user_id) DO NOTHING",
+                LEGACY_ORPHAN,
+            )
+        finally:
+            await conn.close()
+
+    asyncio.run(_seed())
+    minted_users.append(LEGACY_ORPHAN)
+
+    guest = _mint(pg_client)
+    minted_users.append(guest["user_id"])
+
+    created = pg_client.post(
+        "/api/account/create",
+        headers={SESSION: guest["token"]},
+        json={"display_name": "Legacy Carter", "password": "reclaim123"},
+    )
+    assert created.status_code == 200, created.text
+    # The SAME row: the orphaned id - and the profile keyed on it - survives.
+    assert created.json()["user_id"] == LEGACY_ORPHAN
+
+    me = pg_client.get("/api/account/me", headers={SESSION: guest["token"]})
+    assert me.status_code == 200
+    assert me.json()["user_id"] == LEGACY_ORPHAN
+
+    profile = pg_client.get("/api/account/profile", headers={SESSION: guest["token"]})
+    assert profile.status_code == 200
+    assert profile.json()["sensitivity"] == 0.004
+
+    # The chosen password opens the account from a device holding no session.
+    signed = pg_client.post(
+        "/api/account/sign-in",
+        json={"display_name": "legacy carter", "password": "reclaim123"},
+    )
+    assert signed.status_code == 200, signed.text
+    assert signed.json()["user_id"] == LEGACY_ORPHAN
+
+
+SYSTEM_NAMES = ("carter", "katael")
+SYSTEM_IDS = tuple(f"usr_system_{name}" for name in SYSTEM_NAMES)
+
+
+@pytest.fixture()
+def system_account_env(monkeypatch):
+    """The one switch the boot pins system accounts on, wired to the real
+    database, with the pinned rows cleaned up after."""
+    asyncpg = pytest.importorskip("asyncpg")
+    monkeypatch.setenv("DATABASE_URL", PG_DSN)
+    monkeypatch.setenv("SYSTEM_ACCOUNT_PASSWORD", "adminpass1")
+    yield
+    import asyncio
+
+    async def _purge() -> None:
+        conn = await asyncpg.connect(PG_DSN)
+        try:
+            for user_id in SYSTEM_IDS:
+                await conn.execute(
+                    "DELETE FROM accounts WHERE user_id = $1", user_id
+                )
+        finally:
+            await conn.close()
+
+    asyncio.run(_purge())
+
+
+@pytest_intent.intent("INT-019")
+def test_the_boot_pins_system_accounts_on_postgres(system_account_env) -> None:
+    """The deployment's system test accounts exist for the life of the
+    database: the boot pins them, a second boot restates them, and the admin
+    password opens them from the HTTP surface both times."""
+    from fastapi.testclient import TestClient
+
+    from shoot4fun_backend.adapters.inbound.http.app import create_app
+
+    with TestClient(create_app()) as client:
+        signed = client.post(
+            "/api/account/sign-in",
+            json={"display_name": "carter", "password": "adminpass1"},
+        )
+        assert signed.status_code == 200, signed.text
+        assert signed.json()["user_id"] == "usr_system_carter"
+
+    # A second boot is idempotent: restated, not duplicated.
+    with TestClient(create_app()) as client:
+        signed = client.post(
+            "/api/account/sign-in",
+            json={"display_name": "katael", "password": "adminpass1"},
+        )
+        assert signed.status_code == 200, signed.text
+        assert signed.json()["user_id"] == "usr_system_katael"
+
+    asyncpg = pytest.importorskip("asyncpg")
+    import asyncio
+
+    async def _count() -> int:
+        conn = await asyncpg.connect(PG_DSN)
+        try:
+            return await conn.fetchval(
+                "SELECT count(*) FROM accounts WHERE user_id = ANY($1)",
+                list(SYSTEM_IDS),
+            )
+        finally:
+            await conn.close()
+
+    assert asyncio.run(_count()) == 2
