@@ -18,6 +18,7 @@ touching a router.
 """
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 
@@ -174,6 +175,38 @@ class AccountService:
         return await self._accounts.sweep(grace_ms)
 
     # ---- registration and recovery ----------------------------------------
+
+    async def ensure_system_account(
+        self, display_name: str, password: str
+    ) -> Account | None:
+        """Pin a system account: it exists, it is named, and this password
+        opens it - at every boot, so the guarantee outlives whatever a test
+        did to the account the boot before.
+
+        System accounts are the deployment's known test logins (the default
+        pair is `carter` and `katael`). They live under deterministic ids, so
+        the pin finds its row however the store sits: a missing account is
+        created, an existing one has its digest restated, and a credentialess
+        row holding the name - the state the #54 migration left this
+        deployment's own accounts in - is claimed in place, keeping the data
+        keyed on its id. Pinning deliberately overrides change-password for
+        these rows: they are infrastructure, not player state, and the admin
+        password must always work. The one refusal is a credentialed account
+        holding the name - a boot never overrides a credential that works.
+        """
+        if len(password or "") < PASSWORD_MIN_LENGTH:
+            raise ValueError(
+                f"password must be at least {PASSWORD_MIN_LENGTH} characters"
+            )
+        cleaned = normalize_display_name(display_name)
+        stem = re.sub(r"[^a-z0-9]", "", cleaned.casefold())
+        user_id = f"usr_system_{stem}"
+        account = await self._accounts.ensure_system_account(
+            user_id, cleaned, hash_secret(password)
+        )
+        if account is not None:
+            _log.info("system account pinned", extra={"user_id": user_id})
+        return account
 
     async def create_account(
         self, user_id: str, display_name: str, password: str

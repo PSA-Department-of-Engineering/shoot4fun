@@ -149,9 +149,42 @@ class Container:
             connect = getattr(backend, "connect", None)
             if callable(connect):
                 await connect()
+        await self._pin_system_accounts()
         if os.environ.get("DISABLE_TICK_LOOP") != "1":
             self._match_service.start_tick()
         self._sweep_task = asyncio.create_task(self._sweep_loop())
+
+    async def _pin_system_accounts(self) -> None:
+        """The deployment's system test accounts, pinned at every boot.
+
+        `SYSTEM_ACCOUNT_PASSWORD` is the one switch: set it and the named
+        accounts (`SYSTEM_ACCOUNTS`, default `carter,katael`) exist for the
+        life of the deployment, open to that password. Unset means the
+        deployment carries no system accounts and nothing is written.
+        """
+        password = os.environ.get("SYSTEM_ACCOUNT_PASSWORD")
+        if not password:
+            return
+        names = os.environ.get("SYSTEM_ACCOUNTS", "carter,katael")
+        for raw in names.split(","):
+            name = raw.strip()
+            if not name:
+                continue
+            try:
+                account = await self._account_service.ensure_system_account(
+                    name, password
+                )
+            except ValueError:
+                _log.warning(
+                    "system account skipped: password too short",
+                    extra={"display_name": name},
+                )
+                continue
+            if account is None:
+                _log.warning(
+                    "system account skipped: name held by another account",
+                    extra={"display_name": name},
+                )
 
     async def _sweep_loop(self) -> None:
         """Guest rows are minted without a credential, so the sweep is what

@@ -39,6 +39,20 @@ class AccountRepository(Protocol):
 
     async def rename(self, user_id: str, display_name: str) -> Account: ...
 
+    async def ensure_system_account(
+        self, user_id: str, display_name: str, password_hash: str
+    ) -> Account | None:
+        """Pin a system account by its deterministic id, however the store
+        currently sits: created when the name is free, restated when the pin
+        row already exists, and claimed in place when the name is held by a
+        row with no digest on file (the state the #54 migration left the
+        deployment's own system accounts in) - claimed, so the data keyed on
+        that row's id survives. Answers the pinned account, or None when a
+        credentialed account other than the pin row holds the name: a boot
+        never overrides a credential that works.
+        """
+        ...
+
     async def adopt_orphaned(
         self, display_name: str, password_hash: str, session_user_id: str
     ) -> Account | None:

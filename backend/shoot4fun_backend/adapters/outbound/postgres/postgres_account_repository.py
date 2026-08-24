@@ -186,6 +186,48 @@ class PostgresAccountRepository(AccountRepository):
             )
         return _to_account(row)
 
+    async def ensure_system_account(
+        self, user_id: str, display_name: str, password_hash: str
+    ) -> Account | None:
+        """One pinned row per boot, whichever way the store sits. The three
+        steps run in one transaction: claim a credentialess row holding the
+        name (its id - and the data keyed on it - survives), else restate the
+        pin row, else insert it. A unique-index violation means a credentialed
+        account other than the pin row holds the name, and the boot leaves it
+        exactly as it found it rather than overriding a working credential."""
+        async with self._ready.acquire() as conn, conn.transaction():
+            try:
+                row = await conn.fetchrow(
+                    f"UPDATE accounts SET password_hash = $2, registered = TRUE "
+                    f"WHERE lower(display_name) = lower($1) "
+                    f"AND password_hash IS NULL "
+                    f"RETURNING {_ACCOUNT_COLUMNS}",
+                    display_name,
+                    password_hash,
+                )
+                if row is None:
+                    row = await conn.fetchrow(
+                        f"UPDATE accounts SET display_name = $2, "
+                        f"password_hash = $3, registered = TRUE "
+                        f"WHERE user_id = $1 RETURNING {_ACCOUNT_COLUMNS}",
+                        user_id,
+                        display_name,
+                        password_hash,
+                    )
+                if row is None:
+                    row = await conn.fetchrow(
+                        f"INSERT INTO accounts (user_id, display_name, "
+                        f"password_hash, registered) "
+                        f"VALUES ($1, $2, $3, TRUE) "
+                        f"RETURNING {_ACCOUNT_COLUMNS}",
+                        user_id,
+                        display_name,
+                        password_hash,
+                    )
+            except asyncpg.UniqueViolationError:
+                return None
+        return _to_account(row) if row is not None else None
+
     async def adopt_orphaned(
         self, display_name: str, password_hash: str, session_user_id: str
     ) -> Account | None:

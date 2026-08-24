@@ -91,6 +91,38 @@ class InMemoryAccountRepository(AccountRepository):
         self._accounts[user_id] = renamed
         return renamed
 
+    async def ensure_system_account(
+        self, user_id: str, display_name: str, password_hash: str
+    ) -> Account | None:
+        """Mirrors the Postgres adapter's three-step pin: claim a
+        credentialess row holding the name, else restate the pin row, else
+        insert it; None when a credentialed account holds the name."""
+        holder = await self.find_by_display_name(display_name)
+        if holder is not None and self._passwords.get(holder.user_id) is None:
+            target = holder
+        else:
+            target = self._accounts.get(user_id)
+            if target is None:
+                if holder is not None:
+                    return None
+                target = Account(
+                    user_id=user_id,
+                    display_name=display_name,
+                    registered=True,
+                    created_at=_now(),
+                )
+        account = Account(
+            user_id=target.user_id,
+            display_name=display_name,
+            registered=True,
+            created_at=target.created_at,
+            external_issuer=target.external_issuer,
+            external_subject=target.external_subject,
+        )
+        self._accounts[target.user_id] = account
+        self._passwords[target.user_id] = password_hash
+        return account
+
     async def adopt_orphaned(
         self, display_name: str, password_hash: str, session_user_id: str
     ) -> Account | None:
